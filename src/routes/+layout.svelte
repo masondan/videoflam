@@ -18,7 +18,7 @@
 		align-items: flex-start;
 		min-height: 100vh;
 		padding: 0;
-		background: var(--color-background);
+		background: transparent;
 	}
 
 	.app-viewport {

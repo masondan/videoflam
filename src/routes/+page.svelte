@@ -20,7 +20,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: var(--bg-main);
+    background: var(--bg-white);
   }
 
   .app-header {
