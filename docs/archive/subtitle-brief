@@ -1,0 +1,266 @@
+Perfect. I have everything I need. Here is the complete brief.
+
+---
+
+# AudioFlam Subtitle Feature — Build Brief
+**Document type:** Technical implementation brief for a Claude agent in VS Code
+**Codebase:** AudioFlam (SvelteKit 2 + Svelte 5, TypeScript, Cloudflare Pages)
+**Reference:** `AGENTS.md` is the primary codebase reference. Read it before writing any code.
+
+---
+
+## Git workflow — do this first
+
+Before writing any code:
+
+1. Ensure the current main branch is clean. If there are any uncommitted changes, commit or stash them first.
+2. Create a feature branch: `git checkout -b feature/subtitles`
+3. Do all work on this branch. Never commit directly to main during this build.
+4. Commit at the end of each numbered build stage below. Use clear commit messages, e.g. `stage 1: subtitle engine core`, `stage 2: audiogram panel`, etc.
+5. When all stages are complete and tested, merge into main: `git checkout main && git merge feature/subtitles` and push.
+
+---
+
+## Overview
+
+Add subtitle capability to AudioFlam in two modes:
+
+**Mode A — Audiogram subtitles:** burn subtitles into the existing audiogram canvas export.
+
+**Mode B — Video subtitle page:** a new tab where users upload a device video, optionally trim it, add subtitles and a title, then export.
+
+Both modes share a single subtitle engine. The engine must be built as a fully self-contained module with no dependencies on audiogram-specific components, so it can be extracted to a standalone app in future without rework.
+
+---
+
+## Part 1 — Transcription pipeline upgrade
+
+### Word-level timestamps
+
+The existing Whisper integration in `transcription-worker.ts` currently uses `return_timestamps: true`, which returns segment-level timestamps only. Both subtitle templates require word-level timestamps.
+
+**Change `return_timestamps: true` to `return_timestamps: 'word'` in `transcription-worker.ts`.**
+
+The result object will then include both segment-level and word-level data. Update `transcription.ts` to surface word timestamps in the result. The existing Transcribe tab must continue to work unchanged — word timestamps are additive to the existing output, not a replacement.
+
+**Updated data shape from transcription:**
+
+```typescript
+interface WordTimestamp {
+  word: string;
+  start: number;  // seconds
+  end: number;    // seconds
+}
+
+interface SubtitleSegment {
+  start: number;
+  end: number;
+  text: string;
+  words: WordTimestamp[];  // word-level timestamps within this segment
+}
+```
+
+**Performance note:** Word-level timestamps increase transcription time, particularly on low-end Android devices. The agent must ensure the existing progress messaging in the transcription UI is clear enough that users do not interpret a longer run as a hang. No additional UI work required beyond confirming this.
+
+---
+
+## Part 2 — Shared subtitle engine
+
+### New file: `src/lib/utils/subtitles.ts`
+
+This is the core module. It must import nothing from audiogram-specific files (`AudiogramPage.svelte`, `CompositionCanvas.svelte`, `compositor.ts`, `stores.ts`). It accepts and returns plain data only. This is the architectural guarantee that makes future extraction to a standalone app clean.
+
+### Style model
+
+```typescript
+type SubtitleTemplate = 'flow' | 'focus';
+type FontSize = 'small' | 'medium' | 'large';
+type MaxLines = 1 | 2;
+
+interface SubtitleStyle {
+  template: SubtitleTemplate;
+  fontSize: FontSize;
+  maxLines: MaxLines;
+  verticalPosition: number;    // 0–1, proportion from top of canvas
+  textColor: string;           // hex, default #FFFFFF
+  spotlightEnabled: boolean;
+  spotlightColor: string;      // hex, default #FFD700
+  outlineEnabled: boolean;
+  outlineColor: string;        // hex, default #000000
+  shadowEnabled: boolean;
+  shadowColor: string;         // hex, default #000000 (at 50% opacity, hardcoded)
+}
+```
+
+### Template behaviour
+
+**Flow**
+Words within the active segment accumulate left-to-right, each fading in individually with a smooth short fade (~150ms). Once a word has fully faded in, it sits at full opacity in the base text colour. The word currently fading in displays in the spotlight colour if spotlight is enabled; once fully visible it reverts to the base text colour and the next word begins fading in. By default: white text, outline on, shadow off, spotlight off.
+
+**Focus**
+The full line or lines of the active segment appear together instantly. The word whose timestamp window contains `currentTime` is rendered in the spotlight colour. All other words in the segment render in the base text colour. By default: white text, outline on, shadow off, spotlight on in gold (#FFD700).
+
+### Word-timing within a segment for Focus
+
+Use the `words` array from the upgraded transcription output. At any given `currentTime`, the active word is the entry in `words` where `word.start <= currentTime < word.end`. If `currentTime` falls in a gap between words, the most recently completed word holds the spotlight.
+
+### Word-timing within a segment for Flow
+
+Use the same `words` array. Each word begins its fade-in animation at `word.start`. The fade duration is 150ms. Words that have completed their fade-in (i.e. `currentTime > word.start + 0.15`) render at full opacity in the base text colour. The word currently fading in (`word.start <= currentTime <= word.start + 0.15`) renders in the spotlight colour if spotlight is enabled.
+
+### Text rendering rules
+
+No filled background rectangles behind text in either template.
+
+Font: Inter (already self-hosted). Font sizes map proportionally to canvas height: small = 3.5%, medium = 5%, large = 7%. This ensures correct scaling regardless of export resolution.
+
+**Text wrapping:** `wrapSegmentText(text, charsPerLine, maxLines)` wraps segment text to respect the maxLines ceiling. Two lines is a maximum, not a target. Single-line display is normal for standard speech pace.
+
+**Character budget:** `calculateCharsPerLine(canvasWidth, fontSize)` derives how many characters fit per line from canvas width and font size. This is internal to the engine and not exposed to the UI.
+
+**Outline:** if `outlineEnabled`, apply `ctx.strokeText()` before `ctx.fillText()`. Stroke width 2.5px. Stroke colour is `outlineColor`.
+
+**Shadow:** if `shadowEnabled`, set `ctx.shadowColor` to `shadowColor` at 50% opacity (hardcoded), `ctx.shadowBlur = 4`, `ctx.shadowOffsetX = 1`, `ctx.shadowOffsetY = 1`. Reset shadow after drawing.
+
+**Vertical position:** subtitle block is placed at `canvasHeight * verticalPosition`. Default value positions subtitles in the lower quarter of the canvas.
+
+### Core engine functions
+
+`getActiveSegment(segments, currentTime)` — returns the segment whose start/end window contains currentTime, or null.
+
+`wrapSegmentText(text, charsPerLine, maxLines)` — wraps text respecting maxLines ceiling.
+
+`calculateCharsPerLine(canvasWidth, fontSize)` — internal character budget calculation.
+
+`drawSubtitle(ctx, segment, style, canvasWidth, canvasHeight, currentTime)` — draws the subtitle block for the active segment onto a 2D canvas context. Handles both Flow and Focus rendering. Called from `renderFrame()` in the export pipeline and during live playback preview. `currentTime` is required for both word-fade timing (Flow) and active word detection (Focus).
+
+`mergeSegments(segments, indexA, indexB)` — merges two adjacent segments. Text joined with a space. Words arrays concatenated. Timestamp spans from start of A to end of B.
+
+`splitSegmentAtWord(segment, wordIndex)` — splits a segment at a word boundary using word-level timestamps. First segment spans `segment.start` to `words[wordIndex].end`. Second segment spans `words[wordIndex + 1].start` to `segment.end`. Text and words arrays split accordingly. This is acoustically accurate because it uses real word timestamps.
+
+`reflow(segments, style, canvasWidth, canvasHeight)` — after any text edit or style change, re-wraps all segment text against the current character budget. Timestamps and word arrays are never modified by reflow.
+
+---
+
+## Part 3 — Audiogram subtitles
+
+### Integration points
+
+**`src/lib/components/AudiogramPage.svelte`** — add a Subtitles `TogglePanel` following the exact same pattern as Waveform, Title, and Light effect. It renders `SubtitlePanel.svelte`.
+
+**`src/lib/utils/compositor.ts`** — in `renderFrame(currentTime)`, add a call to `drawSubtitle()` from the subtitle engine when subtitles are enabled and `getActiveSegment()` returns a non-null result. Subtitles render as the topmost layer, after all other layers.
+
+**`src/lib/utils/webcodecs-export.ts` and MediaRecorder path** — no changes required. Both paths already route through `renderFrame()`.
+
+### New component: `src/lib/components/SubtitlePanel.svelte`
+
+Collapsible toggle panel containing all subtitle controls. This same component is reused in the video subtitle page.
+
+**Panel contents in order:**
+
+**Template picker** — two buttons: Flow and Focus. Tapping a template immediately updates the canvas preview using placeholder text at the correct size, position and style. Whisper has not run at this point; this is a visual style preview only. Focus is the default.
+
+**Text size** — three-stop slider: Small / Medium / Large. Updates canvas preview immediately.
+
+**Max lines** — toggle: 1 line / 2 lines. Default: 2 lines (as a ceiling). Updates canvas preview immediately.
+
+**Vertical position** — continuous slider. Top of range places subtitles near top of canvas; bottom of range near bottom. Default: lower quarter. Updates canvas preview immediately.
+
+**Style options** — four rows, each following the same pattern:
+
+```
+Text      [colour button → opens ColorPicker, default #FFFFFF]
+Spotlight [toggle] [colour button → opens ColorPicker, default #FFD700]
+Outline   [toggle] [colour button → opens ColorPicker, default #000000]
+Shadow    [toggle] [colour button → opens ColorPicker, default #000000]
+```
+
+Reuse the existing `ColorPicker.svelte` component exactly as used elsewhere in the app. All option changes update the canvas preview immediately.
+
+**Generate subtitles button** — triggers the Whisper transcription worker via the existing `transcribeAudio()` in `transcription.ts`. On completion, `SubtitleSegment[]` (with word timestamps) is stored in subtitle state. Real subtitles appear on the canvas during playback. The Edit button activates. The Reset button activates.
+
+**Reset subtitles button** — visible and active only after generation. Clears all subtitle state, returns the panel to its pre-generation state, removes subtitles from the canvas. Requires a single confirmation before clearing, to prevent accidental loss.
+
+**Edit subtitles button** — inactive until generation is complete. On tap, opens the edit drawer.
+
+### Edit drawer
+
+A bottom sheet or slide-in drawer consistent with existing AudioFlam UI patterns. Contains a scrollable list of all subtitle segments.
+
+Each segment displays:
+
+- Timestamp range — read-only, e.g. `0.8s – 2.1s`
+- Editable text field — user corrects spelling, proper nouns, garbled words. On any edit, `reflow()` runs on that segment immediately.
+- A split button (÷) — opens a word-picker within the segment showing each word as a tappable chip. Tapping a word calls `splitSegmentAtWord()` at that word index using real word timestamps. The drawer updates to show the two resulting segments.
+- Between each pair of adjacent segments, a merge button (+) — calls `mergeSegments()`. The drawer updates immediately.
+
+**Done button** — closes drawer. If any changes were made, `reflow()` runs across all segments and the canvas preview updates. No re-running Whisper.
+
+---
+
+## Part 4 — Video subtitle page
+
+### New tab
+
+Add a tab to the main navigation alongside TTS, Audiogram, and Transcribe. Label: **Subtitle video**.
+
+### New component: `src/lib/components/VideoSubtitlePage.svelte`
+
+Modelled on the audiogram page but simplified. Present: video upload, trim control, title panel (reuse `TitlePanel.svelte` unchanged), subtitle panel (reuse `SubtitlePanel.svelte` unchanged), export button. Absent: image upload, audio upload, waveform panel, light effect panel.
+
+**Upload zone** — single dashed upload area accepting MP4, MOV, WebM. Helper text inside the upload areas states: Upload a video to add subtitles. On mobile, triggers device camera roll. Displays a `<video>` preview element once loaded.
+
+**Trim control** — a scrubber below the video preview with two drag handles representing in-point and out-point. Displays the selected clip duration. Trim is applied at export time; it is not destructive on the uploaded file.
+
+**Playback** — play/pause control. During playback, the canvas renders video frames with subtitles burned in via `drawSubtitle()`, serving as the subtitle preview. No separate preview step is needed.
+
+**Subtitle panel** — `SubtitlePanel.svelte` reused exactly. Generate, Reset, Edit all behave identically to the audiogram mode. The audio track is extracted from the uploaded video for Whisper transcription.
+
+**Title panel** — `TitlePanel.svelte` reused exactly.
+
+**Export button** — label: Download video. Routes through the existing `smartExportVideo()` pipeline.
+
+### Canvas rendering for video mode
+
+In `renderFrame(currentTime)`, draw the video frame using `ctx.drawImage(videoElement, 0, 0, canvasWidth, canvasHeight)` after seeking the video element to `currentTime` offset by the trim in-point. Title and subtitle layers draw on top, identically to the audiogram path.
+
+**iOS Safari risk:** `ctx.drawImage()` from a video element has known constraints on iOS. Test this on iOS Safari as the first action in Stage 4. If it fails, the cloud transcode path via api.video is the fallback. Document the finding in AGENTS.md regardless of outcome before proceeding.
+
+---
+
+## Build order
+
+Build and commit at the end of each stage:
+
+**Stage 1 — Transcription upgrade**
+Amend `transcription-worker.ts` to use `return_timestamps: 'word'`. Update `transcription.ts` result handling. Verify the existing Transcribe tab still works. Commit.
+
+**Stage 2 — Subtitle engine**
+Implement `subtitles.ts` in full. Unit test `drawSubtitle()`, `wrapSegmentText()`, `mergeSegments()`, `splitSegmentAtWord()`, `reflow()` in isolation before integration. Commit.
+
+**Stage 3 — Audiogram subtitle panel**
+Implement `SubtitlePanel.svelte`. Integrate into `AudiogramPage.svelte` and `compositor.ts`. Full audiogram subtitle flow working end to end: generate, preview on canvas during playback, reset, edit drawer with split and merge. Commit.
+
+**Stage 4 — Video subtitle page**
+Implement `VideoSubtitlePage.svelte`. Add new tab. Test iOS `ctx.drawImage()` from video element immediately. Document finding in AGENTS.md. Full video subtitle flow working end to end. Commit.
+
+**Stage 5 — Trim control**
+Add trim scrubber to video page. Apply trim offset in `renderFrame()`. Test export with trim applied. Commit.
+
+**Stage 6 — Merge to main**
+Ensure all stages are tested. `git checkout main && git merge feature/subtitles`. Push. Update AGENTS.md subtitle section to reflect completed feature.
+
+---
+
+## AGENTS.md update
+
+When the feature is complete, add a Subtitles section to AGENTS.md documenting:
+
+- The `SubtitleSegment`, `WordTimestamp`, and `SubtitleStyle` data models
+- The `subtitles.ts` public API with each function's signature and purpose
+- How `renderFrame()` calls `drawSubtitle()` in both audiogram and video modes
+- The word-level timestamp change to `transcription-worker.ts` and why
+- The iOS `ctx.drawImage()` finding from Stage 4
+- The decoupling rationale and what would be required to extract to a standalone app
+
+Follow the existing documentation pattern in AGENTS.md throughout.

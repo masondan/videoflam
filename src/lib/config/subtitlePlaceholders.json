@@ -1,0 +1,12 @@
+{
+  "placeholders": {
+    "flow": {
+      "text": "Your viewer sees the words flow onto the screen one by one",
+      "words": ["Your", "viewer", "sees", "the", "words", "flow", "onto", "the", "screen", "one", "by", "one"]
+    },
+    "focus": {
+      "text": "Keep the focus on the active word with a colour spotlight",
+      "words": ["Keep", "the", "focus", "on", "the", "active", "word", "with", "a", "colour", "spotlight"]
+    }
+  }
+}

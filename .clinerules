@@ -1,0 +1,91 @@
+# AudioFlam .clinerules
+
+## Tech Stack
+- **Framework:** SvelteKit 2 + Svelte 5 (TypeScript, strict mode)
+- **Hosting:** Cloudflare Pages (adapter-cloudflare)
+- **Styling:** Native CSS variables (no Tailwind)
+- **Video Export:** WebCodecs API (H.264/MP4) + MediaRecorder fallback + api.video cloud transcoding
+- **Transcription:** Whisper via @huggingface/transformers (Web Worker)
+- **Audio Processing:** SoundTouchJS (time-stretching), lamejs (MP3), Mediabunny (MP4 muxing)
+
+## Key Conventions
+- **Svelte 5 Runes:** Use `$state`, `$effect`, `$derived` (not reactive declarations)
+- **TypeScript:** Strict mode enabled; avoid unchecked type assertions
+- **CSS:** All styling via `src/app.css` CSS variables; no inline styles
+- **Stores:** Centralized in `src/lib/stores.ts` (writable + custom)
+- **API Routes:** `src/routes/api/*/+server.ts` (SvelteKit server endpoints)
+- **Utilities:** `src/lib/utils/*.ts` (pure functions, no side effects)
+- **Components:** `src/lib/components/*.svelte` (single responsibility)
+- **Logging:** Use prefixes `[WebCodecs]`, `[VideoExport]`, `[TTS]`, `[Transcription]` for console logs
+
+## APIs & Services
+- **Azure Speech TTS:** `env.AZURE_SPEECH_KEY`, `env.AZURE_SPEECH_REGION` (fast, ~3s)
+- **YarnGPT TTS:** `env.YARNGPT_API_KEY` (native Nigerian voices, ~30s)
+- **api.video:** `env.APIVIDEO_API_KEY` (cloud transcoding, WebM → MP4)
+- **Hugging Face Transformers:** Whisper model (quantized or full, 100-350MB)
+
+## What NOT to Do
+- ❌ **No authentication** - Public, educational use only
+- ❌ **No Tailwind** - CSS variables only
+- ❌ **No audio playback during WebCodecs export** - Causes stuttering; use pre-computed FFT frames
+- ❌ **Don't assume MediaRecorder H.264 works on Android** - Always check WebCodecs first
+- ❌ **Don't forget XML escaping in SSML** - User text must be escaped before embedding
+- ❌ **Don't use Buffer.from() in Cloudflare** - Use `btoa()` for base64 encoding
+- ❌ **Don't add heavy dependencies** - Keep bundle <500KB
+- ❌ **Don't break robots.txt** - Must remain `noindex, nofollow` (educational use)
+- ❌ **Don't play audio during export** - Render with pre-computed FFT data instead
+- ❌ **Don't forget mono→stereo conversion** - AAC encoders reject mono audio
+
+## Current Status (April 2026)
+✅ TTS (Azure + YarnGPT, single + two-speaker modes)
+✅ Audiogram creation (image + audio + waveform + effects)
+✅ MP4 export (WebCodecs + MediaRecorder + cloud fallback)
+✅ Transcription (Whisper, multilingual, quantized)
+✅ Audio processing (silence removal, normalization, time-stretching)
+✅ Two-speaker mode (multi-voice composition)
+
+⚠️ **Known Issues (HIGH priority):**
+- Type assertion in `webcodecs-export.ts:445` without runtime guard
+- TTS error handling gaps (generic "error" messages)
+- Missing request throttling for TTS API
+- Audio encoding inconsistency between export paths
+
+## Immediate Priorities
+1. Fix type assertion in webcodecs-export.ts (HIGH)
+2. Improve TTS error messages (HIGH)
+3. Add request throttling for TTS API (MEDIUM)
+4. Add canvas export validation (MEDIUM)
+
+## File Navigation (Quick Reference)
+- **TTS:** `src/routes/api/tts/+server.ts` + `src/routes/+page.svelte`
+- **Audiogram:** `src/lib/components/AudiogramPage.svelte` + `src/lib/utils/compositor.ts`
+- **Export:** `src/lib/utils/video-export.ts` (orchestration)
+- **Transcription:** `src/lib/components/TranscribePage.svelte` + `src/lib/utils/transcription.ts`
+- **Waveform:** `src/lib/utils/waveform.ts` (precomputeFrequencyFrames critical)
+- **Audio Processing:** `src/lib/audioProcessing.ts` + `src/lib/server/silenceRemoval.ts`
+- **Design:** `src/app.css` (CSS variables)
+
+## Critical Patterns
+- **Waveform Export Parity:** Use `precomputeFrequencyFrames()` before export; pass pre-computed frames to `renderFrame(currentTime)`
+- **Two-Speaker Mode:** Call `concatenateAudioSegments()` after generating both voices
+- **Transcription:** Run in Web Worker via `getWorker()`; call `releaseModel()` when done
+- **Export Fallback:** WebCodecs → MediaRecorder → api.video cloud transcoding
+
+## Reference Documents
+- **AGENTS.md** - Complete agent reference (this is your primary guide)
+- **docs/QUALITY_REPORT.md** - Known issues and fixes
+- **docs/TROUBLESHOOTING.md** - Q&A for common problems
+- **docs/ARCHITECTURE.md** - System design and data flows
+- **docs/archive/** - Historical context and design decisions
+
+## Commands
+```bash
+npm run dev          # Local development
+npm run build        # Production build
+npm run check        # TypeScript/Svelte checks
+npm run check:watch  # Watch mode
+```
+
+---
+**Last Updated:** April 2026
+**Loaded at:** Session start (every Cline session)

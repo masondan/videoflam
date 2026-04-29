@@ -1,0 +1,37 @@
+{
+  "name": "SubFlam",
+  "short_name": "SubFlam",
+  "description": "Add subtitles to your videos automatically. Upload, transcribe, style and export as MP4.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#5422b0",
+  "theme_color": "#5422b0",
+  "categories": [
+    "education",
+    "productivity"
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/logo-subflam-og.png",
+      "sizes": "1200x630",
+      "form_factor": "wide",
+      "type": "image/png"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/logo-subflam-gen.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-subflam-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
