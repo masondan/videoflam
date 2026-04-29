@@ -434,7 +434,7 @@
   </div>
 
   <!-- Vertical position -->
-  <div class="panel-row vertical">
+  <div class="panel-row">
     <span class="row-label">Position</span>
     <input
       type="range"
@@ -522,7 +522,7 @@
         ></button>
       </div>
       {#if style.shadowEnabled}
-        <div class="shadow-opacity-row">
+        <div class="shadow-opacity-row panel-row">
           <span class="row-label">Opacity</span>
           <input
             type="range"
@@ -795,7 +795,7 @@
 
   /* Position slider */
   .position-slider {
-    width: 100%;
+    flex: 1;
     height: 6px;
     border-radius: var(--radius-round);
     background: var(--color-border);
@@ -1218,19 +1218,11 @@
   }
 
   .shadow-opacity-row {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-xs);
     padding-top: var(--spacing-sm);
   }
 
-  .shadow-opacity-row .row-label {
-    min-width: unset;
-  }
-
   .shadow-opacity-row .position-slider {
-    width: 100%;
+    flex: 1;
   }
 
   /* Style controls row */
