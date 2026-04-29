@@ -1,7 +1,7 @@
 {
   "name": "SubFlam",
   "short_name": "SubFlam",
-  "description": "Add subtitles to your videos automatically. Upload, transcribe, style and export as MP4.",
+  "description": "Simple subtitles for video.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
