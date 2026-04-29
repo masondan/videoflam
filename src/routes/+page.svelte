@@ -4,10 +4,11 @@
 
 <div class="app-container">
   <header class="app-header">
-    <div class="header-left">
-      <flam-nav current="subflam"></flam-nav>
+    <flam-nav current="subflam"></flam-nav>
+    <div class="header-center">
       <img src="/icons/logo-subflam-logotype.png" alt="SubFlam" class="logotype" />
     </div>
+    <div class="header-spacer"></div>
   </header>
 
   <main class="main-content">
@@ -24,15 +25,23 @@
   }
 
   .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: var(--spacing-md) var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
     background: var(--bg-white);
   }
 
-  .header-left {
+  .header-center {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    justify-content: center;
+    flex: 1;
+  }
+
+  .header-spacer {
+    width: 40px;
   }
 
   .logotype {
