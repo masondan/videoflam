@@ -44,6 +44,11 @@ export interface SubtitleStyle {
 	boldEnabled: boolean;
 	uppercaseEnabled: boolean;
 	fontFamily: FontName;
+	labelEnabled: boolean;       // toggle for label backgrounds
+	labelColor: string;          // hex, default #5422b0 (brand purple)
+	labelPadding: number;        // 6px padding
+	labelBorderRadius: number;   // 8px rounded corners
+	labelFadeDuration: number;   // 100ms fade in/out (Flow mode)
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -64,6 +69,11 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 	boldEnabled: true,
 	uppercaseEnabled: false,
 	fontFamily: 'Inter',
+	labelEnabled: false,
+	labelColor: '#5422b0',
+	labelPadding: 10,
+	labelBorderRadius: 12,
+	labelFadeDuration: 100,
 };
 
 // --- Font size mapping ---
@@ -329,6 +339,15 @@ export function drawSubtitle(
 	const blockY = canvasHeight * style.verticalPosition;
 	const centerX = canvasWidth / 2;
 
+	// Render label if enabled
+	if (style.labelEnabled) {
+		if (style.template === 'focus') {
+			drawFocusLabel(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx);
+		} else if (style.template === 'flow') {
+			drawFlowLabel(ctx, segment, style, currentTime, lines, centerX, blockY, lineHeight, fontPx, wordOffset);
+		}
+	}
+
 	if (style.template === 'focus') {
 		drawFocusSubtitle(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, currentTime, activeWordIndex, wordOffset);
 	} else {
@@ -495,6 +514,175 @@ function drawFlowSubtitle(
 			wordIdx++;
 		}
 	}
+}
+
+function drawFocusLabel(
+	ctx: CanvasRenderingContext2D,
+	segment: SubtitleSegment,
+	style: SubtitleStyle,
+	lines: string[],
+	centerX: number,
+	blockY: number,
+	lineHeight: number,
+	fontPx: number
+): void {
+	const pad = style.labelPadding;
+	const canvasWidth = centerX * 2;
+
+	// Draw a separate label rectangle per line, each hugging its own text width.
+	// textBaseline = 'top', so text renders downward from lineY.
+	// Use fontPx (actual glyph height) not lineHeight (includes line gap) for rect height.
+	for (let li = 0; li < lines.length; li++) {
+		const displayText = style.uppercaseEnabled ? lines[li].toUpperCase() : lines[li];
+		const lineWidth = ctx.measureText(displayText).width;
+		const lineY = blockY + li * lineHeight;
+
+		let labelX: number;
+		switch (style.textAlign) {
+			case 'left':
+				labelX = canvasWidth * 0.05 - pad;
+				break;
+			case 'right':
+				labelX = canvasWidth * 0.95 - lineWidth - pad;
+				break;
+			default: // center
+				labelX = centerX - lineWidth / 2 - pad;
+		}
+
+		drawRoundedRect(
+			ctx,
+			labelX,
+			lineY - pad,
+			lineWidth + pad * 2,
+			fontPx + pad * 2,
+			style.labelBorderRadius,
+			style.labelColor,
+			1.0
+		);
+	}
+}
+
+function drawFlowLabel(
+	ctx: CanvasRenderingContext2D,
+	segment: SubtitleSegment,
+	style: SubtitleStyle,
+	currentTime: number,
+	lines: string[],
+	centerX: number,
+	blockY: number,
+	lineHeight: number,
+	fontPx: number,
+	wordOffset: number
+): void {
+	const allWords = segment.words;
+	const canvasWidth = centerX * 2;
+	const pad = style.labelPadding;
+	const fadeDurationSec = style.labelFadeDuration / 1000;
+
+	let wordIdx = wordOffset;
+
+	for (let li = 0; li < lines.length; li++) {
+		const lineY = blockY + li * lineHeight;
+		const lineWords = lines[li].split(/\s+/);
+
+		// Build display words for width measurement (same as drawFlowSubtitle)
+		const displayWords: string[] = lineWords.map((w, wi) => {
+			const originalWord = allWords[wordIdx + wi];
+			return style.uppercaseEnabled
+				? w.toUpperCase()
+				: (originalWord ? originalWord.word : w);
+		});
+		const transformedLineText = displayWords.join(' ');
+		const totalLineWidth = ctx.measureText(transformedLineText).width;
+		let wordX = getTextStartX(canvasWidth, style.textAlign, totalLineWidth);
+
+		for (let wi = 0; wi < lineWords.length; wi++) {
+			if (wordIdx >= allWords.length) break;
+
+			const displayWord = displayWords[wi];
+			const timing = allWords[wordIdx];
+
+			if (!timing || currentTime < timing.start) {
+				wordX += ctx.measureText(displayWord + ' ').width;
+				wordIdx++;
+				continue;
+			}
+
+			// Only draw label for the currently active word
+			if (currentTime >= timing.start && currentTime < timing.end) {
+				const opacity = calculateLabelOpacity(currentTime, timing.start, timing.end, fadeDurationSec);
+				if (opacity >= 0.01) {
+					const wordWidth = ctx.measureText(displayWord).width;
+					// textBaseline = 'top': text renders downward from lineY.
+					// Use fontPx for rect height (not lineHeight) for even padding.
+					drawRoundedRect(
+						ctx,
+						wordX - pad,
+						lineY - pad,
+						wordWidth + pad * 2,
+						fontPx + pad * 2,
+						style.labelBorderRadius,
+						style.labelColor,
+						opacity
+					);
+				}
+			}
+
+			wordX += ctx.measureText(displayWord + ' ').width;
+			wordIdx++;
+		}
+	}
+}
+
+function calculateLabelOpacity(
+	currentTime: number,
+	wordStart: number,
+	wordEnd: number,
+	fadeDurationSec: number
+): number {
+	// Time to fade in (from word start)
+	if (currentTime < wordStart) return 0;
+	if (currentTime < wordStart + fadeDurationSec) {
+		// Fade in phase
+		return (currentTime - wordStart) / fadeDurationSec;
+	}
+
+	// Time to fade out (approaching word end)
+	if (currentTime > wordEnd - fadeDurationSec) {
+		// Fade out phase
+		return Math.max(0, (wordEnd - currentTime) / fadeDurationSec);
+	}
+
+	// Full opacity during middle of word
+	return 1.0;
+}
+
+function drawRoundedRect(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	radius: number,
+	fillColor: string,
+	opacity: number = 1.0
+): void {
+	// Parse hex color and apply opacity
+	const rgb = hexToRgb(fillColor);
+	ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+
+	ctx.beginPath();
+	ctx.moveTo(x + radius, y);
+	ctx.lineTo(x + width - radius, y);
+	ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+	ctx.lineTo(x + width, y + height - radius);
+	ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+	ctx.lineTo(x + radius, y + height);
+	ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+	ctx.lineTo(x, y + radius);
+	ctx.quadraticCurveTo(x, y, x + radius, y);
+	ctx.closePath();
+	ctx.fill();
 }
 
 function applyTextEffects(

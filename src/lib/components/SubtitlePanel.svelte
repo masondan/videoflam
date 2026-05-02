@@ -62,7 +62,7 @@
   let showResetConfirm = $state(false);
 
   // Color picker state
-  let colorPickerTarget = $state<'text' | 'spotlight' | 'outline' | 'shadow' | null>(null);
+  let colorPickerTarget = $state<'text' | 'spotlight' | 'outline' | 'shadow' | 'label' | null>(null);
 
   // Local reactive copy of segments — ensures edits are captured before reflow
   let localSegments = $state<SubtitleSegment[]>([]);
@@ -110,6 +110,36 @@
 
   function setTemplate(t: SubtitleTemplate) {
     updateStyle({ template: t });
+    // Auto-apply template defaults on switch
+    const defaults = getTemplateDefaults(t);
+    Object.entries(defaults).forEach(([key, value]) => {
+      updateStyle({ [key as keyof SubtitleStyle]: value });
+    });
+  }
+
+  function getTemplateDefaults(template: SubtitleTemplate): Partial<SubtitleStyle> {
+    if (template === 'focus') {
+      return {
+        labelColor: '#5422b0',
+        outlineEnabled: true,
+        outlineStrokeWidth: 1,
+        spotlightEnabled: true,
+        spotlightColor: '#FFD700',
+        textColor: '#FFFFFF',
+      };
+    }
+    if (template === 'flow') {
+      return {
+        labelColor: '#5422b0',
+        outlineEnabled: true,
+        outlineStrokeWidth: 1,
+        spotlightEnabled: true,
+        spotlightColor: '#FFD700',
+        textColor: '#FFFFFF',
+        labelFadeDuration: 100,
+      };
+    }
+    return {};
   }
 
   function setFontSize(s: FontSize) {
@@ -554,6 +584,36 @@
         </div>
       {/if}
     </div>
+
+    <!-- Label -->
+    <div class="style-group" class:expanded={style.labelEnabled}>
+      <div class="style-row">
+        <span class="style-label">Label</span>
+        <button
+          type="button"
+          class="toggle-switch"
+          class:active={style.labelEnabled}
+          onclick={() => {
+            const newLabelEnabled = !style.labelEnabled;
+            const updates: Partial<typeof style> = { labelEnabled: newLabelEnabled };
+            // Flow: spotlight off when label on, spotlight on when label off
+            if (style.template === 'flow') {
+              updates.spotlightEnabled = !newLabelEnabled;
+            }
+            updateStyle(updates);
+          }}
+          aria-pressed={style.labelEnabled}
+          aria-label="Toggle label"
+        ><span class="toggle-thumb"></span></button>
+        <button
+          type="button"
+          class="color-swatch"
+          style="background: {style.labelColor}"
+          onclick={() => colorPickerTarget = 'label'}
+          aria-label="Label colour"
+        ></button>
+      </div>
+    </div>
   </div>
 
   <!-- Generate / Reset / Edit buttons -->
@@ -650,6 +710,12 @@
   <ColorPicker
     color={style.shadowColor}
     onColorChange={(c) => updateStyle({ shadowColor: c })}
+    onClose={() => colorPickerTarget = null}
+  />
+{:else if colorPickerTarget === 'label'}
+  <ColorPicker
+    color={style.labelColor}
+    onColorChange={(c) => updateStyle({ labelColor: c })}
     onClose={() => colorPickerTarget = null}
   />
 {/if}
