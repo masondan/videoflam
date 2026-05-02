@@ -482,23 +482,40 @@
     </div>
 
     <!-- Outline -->
-    <div class="style-row">
-      <span class="style-label">Outline</span>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={style.outlineEnabled}
-        onclick={() => updateStyle({ outlineEnabled: !style.outlineEnabled })}
-        aria-pressed={style.outlineEnabled}
-        aria-label="Toggle outline"
-      ><span class="toggle-thumb"></span></button>
-      <button
-        type="button"
-        class="color-swatch"
-        style="background: {style.outlineColor}"
-        onclick={() => colorPickerTarget = 'outline'}
-        aria-label="Outline colour"
-      ></button>
+    <div class="style-group" class:expanded={style.outlineEnabled}>
+      <div class="style-row">
+        <span class="style-label">Outline</span>
+        <button
+          type="button"
+          class="toggle-switch"
+          class:active={style.outlineEnabled}
+          onclick={() => updateStyle({ outlineEnabled: !style.outlineEnabled })}
+          aria-pressed={style.outlineEnabled}
+          aria-label="Toggle outline"
+        ><span class="toggle-thumb"></span></button>
+        <button
+          type="button"
+          class="color-swatch"
+          style="background: {style.outlineColor}"
+          onclick={() => colorPickerTarget = 'outline'}
+          aria-label="Outline colour"
+        ></button>
+      </div>
+      {#if style.outlineEnabled}
+        <div class="stroke-width-row panel-row">
+          <span class="row-label">Stroke</span>
+          <input
+            type="range"
+            class="position-slider"
+            min="1"
+            max="5"
+            step="0.1"
+            value={style.outlineStrokeWidth}
+            oninput={(e) => updateStyle({ outlineStrokeWidth: parseFloat((e.target as HTMLInputElement).value) })}
+            aria-label="Outline stroke width"
+          />
+        </div>
+      {/if}
     </div>
 
     <!-- Shadow -->
@@ -1222,6 +1239,14 @@
   }
 
   .shadow-opacity-row .position-slider {
+    flex: 1;
+  }
+
+  .stroke-width-row {
+    padding-top: var(--spacing-sm);
+  }
+
+  .stroke-width-row .position-slider {
     flex: 1;
   }
 

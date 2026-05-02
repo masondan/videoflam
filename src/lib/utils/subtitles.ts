@@ -36,6 +36,7 @@ export interface SubtitleStyle {
 	spotlightColor: string;      // hex, default #FFD700
 	outlineEnabled: boolean;
 	outlineColor: string;        // hex, default #000000
+	outlineStrokeWidth: number;  // 1–5px, default 1
 	shadowEnabled: boolean;
 	shadowColor: string;         // hex, default #000000
 	shadowOpacity: number;       // 0–1, default 0.5
@@ -55,6 +56,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 	spotlightColor: '#FFD700',
 	outlineEnabled: true,
 	outlineColor: '#555555',
+	outlineStrokeWidth: 1,
 	shadowEnabled: false,
 	shadowColor: '#000000',
 	shadowOpacity: 0.5,
@@ -402,7 +404,7 @@ function drawFocusSubtitle(
 
 			if (style.outlineEnabled) {
 				ctx.strokeStyle = style.outlineColor;
-				ctx.lineWidth = 1;
+				ctx.lineWidth = style.outlineStrokeWidth;
 				ctx.textAlign = 'left';
 				ctx.strokeText(displayWord, wordX, lineY);
 			}
@@ -478,7 +480,7 @@ function drawFlowSubtitle(
 
 			if (style.outlineEnabled) {
 				ctx.strokeStyle = style.outlineColor;
-				ctx.lineWidth = 1;
+				ctx.lineWidth = style.outlineStrokeWidth;
 				ctx.textAlign = 'left';
 				ctx.strokeText(displayWord, wordX, lineY);
 			}
