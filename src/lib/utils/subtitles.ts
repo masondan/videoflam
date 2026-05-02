@@ -55,7 +55,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 	template: 'focus',
 	fontSize: 'medium',
 	maxLines: 2,
-	verticalPosition: 0.80,
+	verticalPosition: 0.75,
 	textColor: '#FFFFFF',
 	spotlightEnabled: true,
 	spotlightColor: '#FFD700',

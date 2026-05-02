@@ -538,7 +538,7 @@
             type="range"
             class="position-slider"
             min="1"
-            max="5"
+            max="8"
             step="0.1"
             value={style.outlineStrokeWidth}
             oninput={(e) => updateStyle({ outlineStrokeWidth: parseFloat((e.target as HTMLInputElement).value) })}
