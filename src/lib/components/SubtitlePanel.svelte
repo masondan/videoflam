@@ -164,26 +164,41 @@
 
     generating = true;
     generateError = null;
-    generateStage = 'Generating…';
+    generateStage = 'Preparing audio…';
 
     try {
       const formData = new FormData();
       // Use the blob's actual MIME type (e.g., audio/webm from MediaRecorder)
       // Don't force it to MP3 — Deepgram needs the real format to decode correctly
-      const audioFile = new File([audioBlob], 'audio', { type: audioBlob.type || 'audio/mpeg' });
+      const mimeType = audioBlob.type || 'audio/mpeg';
+      const audioFile = new File([audioBlob], 'audio', { type: mimeType });
       formData.append('audio', audioFile);
       formData.append('language', selectedLanguage);
 
-      const response = await fetch('/api/transcribe-deepgram', {
-        method: 'POST',
-        body: formData,
-      });
+      generateStage = `Uploading (${(audioBlob.size / 1024).toFixed(0)} KB, ${mimeType})…`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+
+      let response: Response;
+      try {
+        response = await fetch('/api/transcribe-deepgram', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      generateStage = `Processing response (${response.status})…`;
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `Transcription failed (${response.status})`);
       }
 
+      generateStage = 'Parsing subtitles…';
       const data = await response.json();
       const subtitleSegs: SubtitleSegment[] = (data.segments ?? []).map((seg: any) => {
         const words = (seg.words ?? []).map((w: any) => ({
@@ -209,7 +224,11 @@
       onEnabledChange(true);
       generateStage = '';
     } catch (err) {
-      generateError = err instanceof Error ? err.message : 'Transcription failed';
+      if (err instanceof Error && err.name === 'AbortError') {
+        generateError = 'Request timed out (90s). Check your connection and try again.';
+      } else {
+        generateError = err instanceof Error ? `${err.name}: ${err.message}` : 'Transcription failed';
+      }
       generateStage = '';
     } finally {
       generating = false;
