@@ -39,6 +39,9 @@
   let subtitleSegments: SubtitleSegment[] = $state([]);
   let subtitlesEnabled = $state(false);
 
+  // Extracted audio for transcription (much smaller than full video)
+  let extractedAudioBlob = $state<Blob | null>(null);
+
   // Export / upload state
   let isExporting = $state(false);
   let exportError: string | null = $state(null);
@@ -239,13 +242,71 @@
         tempVideo.currentTime = 0;
       });
 
+      // Extract audio in background (don't block video load)
+      extractAudioFromVideo(file).then(blob => {
+        extractedAudioBlob = blob;
+      }).catch(err => {
+        console.warn('[VideoSubtitle] Audio extraction failed, falling back to video blob:', err);
+        extractedAudioBlob = file; // fallback: send full video
+      });
+
     } catch (error) {
       uploadError = error instanceof Error ? error.message : 'Failed to load video';
       videoBlob = null;
       videoObjectUrl = null;
+      extractedAudioBlob = null;
     } finally {
       videoLoading = false;
     }
+  }
+
+  // ─── Audio extraction ─────────────────────────────────────────────────────
+  // Decode video audio track via Web Audio API and re-encode as WAV.
+  // WAV for a 10s video is ~1.7MB vs 12MB+ for the full video file.
+  async function extractAudioFromVideo(videoFile: Blob): Promise<Blob> {
+    const arrayBuffer = await videoFile.arrayBuffer();
+    const audioCtx = new AudioContext();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    await audioCtx.close();
+
+    // Encode AudioBuffer to WAV
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const numSamples = audioBuffer.length;
+    const bytesPerSample = 2; // 16-bit PCM
+    const dataLength = numSamples * numChannels * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+
+    // WAV header
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);          // chunk size
+    view.setUint16(20, 1, true);           // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true); // byte rate
+    view.setUint16(32, numChannels * bytesPerSample, true); // block align
+    view.setUint16(34, 16, true);          // bits per sample
+    writeStr(36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    // Interleave channels and write PCM samples
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
   }
 
   // ─── Render helpers ───────────────────────────────────────────────────────
@@ -396,6 +457,7 @@
       videoObjectUrl = null;
     }
     videoBlob = null;
+    extractedAudioBlob = null;
     videoDuration = 0;
     trimStart = 0;
     trimEnd = 1;
@@ -890,7 +952,7 @@
   <div class:disabled={!hasVideo}>
     {#key resetKey}
       <SubtitlePanel
-        audioBlob={videoBlob}
+        audioBlob={extractedAudioBlob ?? videoBlob}
         {canvasWidth}
         {canvasHeight}
         style={subtitleStyle}
