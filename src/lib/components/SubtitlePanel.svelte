@@ -46,6 +46,7 @@
   let generating = $state(false);
   let generateError = $state<string | null>(null);
   let generateStage = $state('');
+  let generationController = $state<AbortController | null>(null);
 
   // Language selection state
   let selectedLanguage = $state('auto');
@@ -164,41 +165,32 @@
 
     generating = true;
     generateError = null;
-    generateStage = 'Preparing audio…';
+    generateStage = '';
 
     try {
       const formData = new FormData();
-      // Use the blob's actual MIME type (e.g., audio/webm from MediaRecorder)
-      // Don't force it to MP3 — Deepgram needs the real format to decode correctly
-      const mimeType = audioBlob.type || 'audio/mpeg';
-      const audioFile = new File([audioBlob], 'audio', { type: mimeType });
+      const audioFile = new File([audioBlob], 'audio', { type: audioBlob.type || 'audio/mpeg' });
       formData.append('audio', audioFile);
       formData.append('language', selectedLanguage);
 
-      generateStage = `Uploading (${(audioBlob.size / 1024).toFixed(0)} KB, ${mimeType})…`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+      const timeoutId = setTimeout(() => generationController?.abort(), 90000);
 
       let response: Response;
       try {
         response = await fetch('/api/transcribe-deepgram', {
           method: 'POST',
           body: formData,
-          signal: controller.signal,
+          signal: generationController.signal,
         });
       } finally {
         clearTimeout(timeoutId);
       }
-
-      generateStage = `Processing response (${response.status})…`;
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `Transcription failed (${response.status})`);
       }
 
-      generateStage = 'Parsing subtitles…';
       const data = await response.json();
       const subtitleSegs: SubtitleSegment[] = (data.segments ?? []).map((seg: any) => {
         const words = (seg.words ?? []).map((w: any) => ({
@@ -224,14 +216,16 @@
       onEnabledChange(true);
       generateStage = '';
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        generateError = 'Request timed out (90s). Check your connection and try again.';
-      } else {
-        generateError = err instanceof Error ? `${err.name}: ${err.message}` : 'Transcription failed';
-      }
-      generateStage = '';
+      generateError = err instanceof Error ? err.message : 'Transcription failed';
     } finally {
       generating = false;
+      generationController = null;
+    }
+  }
+
+  function handleCancelGeneration() {
+    if (generationController) {
+      generationController.abort();
     }
   }
 
@@ -638,20 +632,32 @@
   <!-- Generate / Reset / Edit buttons -->
   <div class="action-buttons">
     {#if !hasSegments}
-      <button
-        type="button"
-        class="generate-btn"
-        class:loading={generating}
-        onclick={handleGenerate}
-        disabled={generating || !audioBlob}
-      >
-        {#if generating}
-          <span class="btn-spinner"></span>
-          {generateStage || 'Generating…'}
-        {:else}
+      {#if generating}
+        <div class="generating-row">
+          <button
+            type="button"
+            class="generate-btn generating"
+            disabled
+          >
+            <span class="btn-spinner"></span>
+            {generateStage || 'Generating…'}
+          </button>
+          <button
+            type="button"
+            class="cancel-btn"
+            onclick={handleCancelGeneration}
+          >Cancel</button>
+        </div>
+      {:else}
+        <button
+          type="button"
+          class="generate-btn"
+          onclick={handleGenerate}
+          disabled={!audioBlob}
+        >
           Generate subtitles
-        {/if}
-      </button>
+        </button>
+      {/if}
     {:else}
       <div class="has-segments-row">
         <button
@@ -993,7 +999,7 @@
   .generate-btn {
     width: 100%;
     padding: var(--spacing-sm) var(--spacing-md);
-    background: #555555;
+    background: var(--color-primary);
     color: #fff;
     border: none;
     border-radius: var(--radius-md);
@@ -1008,14 +1014,15 @@
   }
 
   .generate-btn:disabled {
-    background: var(--color-border);
-    color: var(--text-secondary);
+    background: #cccccc;
+    color: #777777;
     cursor: not-allowed;
   }
 
-  .generate-btn.loading {
-    background: #555555;
-    opacity: 0.8;
+  .generate-btn.generating {
+    background: var(--color-primary);
+    color: #fff;
+    cursor: default;
   }
 
   .btn-spinner {
@@ -1032,6 +1039,33 @@
     to { transform: rotate(360deg); }
   }
 
+  .generating-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .generating-row .generate-btn {
+    flex: 1;
+  }
+
+  .cancel-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-white);
+    color: var(--text-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: border-color var(--transition-normal);
+    flex-shrink: 0;
+  }
+
+  .cancel-btn:hover {
+    border-color: var(--color-border-active);
+  }
+
   .has-segments-row {
     display: flex;
     gap: var(--spacing-sm);
@@ -1040,7 +1074,7 @@
   .edit-btn {
     flex: 1;
     padding: var(--spacing-sm) var(--spacing-md);
-    background: #555555;
+    background: var(--color-primary);
     color: #fff;
     border: none;
     border-radius: var(--radius-md);
@@ -1051,7 +1085,7 @@
   }
 
   .edit-btn:hover {
-    background: #444444;
+    background: #4a1d9e;
   }
 
   .reset-btn {

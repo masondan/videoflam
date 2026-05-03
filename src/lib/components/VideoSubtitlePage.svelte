@@ -971,7 +971,7 @@
       class="export-button"
       class:exporting={isExporting || (exportProgress && exportProgress.phase !== 'complete')}
       onclick={handleExport}
-      disabled={isExporting || !hasVideo}
+      disabled={isExporting || !hasVideo || subtitleSegments.length === 0}
     >
       {#if exportProgress}
         <div class="export-progress">
@@ -1281,22 +1281,23 @@
 
   .export-button {
     padding: var(--spacing-md) var(--spacing-lg);
-    background: var(--accent-brand);
+    background: #333333;
     color: white;
     border: none;
     border-radius: var(--radius-md);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: opacity var(--transition-normal);
+    transition: background var(--transition-normal);
   }
 
   .export-button:hover:not(:disabled) {
-    opacity: 0.9;
+    background: #1a1a1a;
   }
 
   .export-button:disabled {
-    opacity: 0.6;
+    background: #cccccc;
+    color: #777777;
     cursor: not-allowed;
   }
 
