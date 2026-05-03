@@ -167,13 +167,14 @@
     generateError = null;
     generateStage = '';
 
+    generationController = new AbortController();
+    const timeoutId = setTimeout(() => generationController?.abort(), 90000);
+
     try {
       const formData = new FormData();
       const audioFile = new File([audioBlob], 'audio', { type: audioBlob.type || 'audio/mpeg' });
       formData.append('audio', audioFile);
       formData.append('language', selectedLanguage);
-
-      const timeoutId = setTimeout(() => generationController?.abort(), 90000);
 
       let response: Response;
       try {
@@ -219,7 +220,7 @@
       generateError = err instanceof Error ? err.message : 'Transcription failed';
     } finally {
       generating = false;
-      generationController = null;
+      clearTimeout(timeoutId);
     }
   }
 
