@@ -34,25 +34,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Topic is required' }, { status: 400 });
 	}
 
-	// Map duration to approximate word count (speaking pace ~130 wpm)
-	const wordTargets: Record<string, number> = {
-		'30s': 65,
-		'1min': 130,
-		'2min': 260,
-	};
-	const wordTarget = wordTargets[duration] ?? 130;
-
 	// Build system prompt from JSON config
-	const systemPrompt = [
-		promptConfig.role,
-		promptConfig.style.join(' '),
-		`Target approximately ${wordTarget} words (spoken at a natural pace).`,
-		url.trim() ? promptConfig.sourceGuidance : '',
-		promptConfig.format.join('\n'),
-	]
-		.filter(Boolean)
-		.join('\n');
+	const systemPrompt = JSON.stringify(promptConfig, null, 2);
 
+	// Build user prompt with all inputs
 	const userPromptParts = [
 		audience.trim() ? `Audience: ${audience.trim()}` : null,
 		`Topic / Question: ${topic.trim()}`,
@@ -77,9 +62,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				],
 				tools: [{ google_search: {} }],
 				generationConfig: {
-					temperature: 1.0,
-					maxOutputTokens: 1024,
-				},
+						temperature: 1.0,
+						maxOutputTokens: 2048,
+					},
 			}),
 		});
 

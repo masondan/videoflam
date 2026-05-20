@@ -158,61 +158,67 @@
       </section>
 
       <!-- Script output -->
-      {#if script || isGenerating}
-        <section class="script-section">
-          <div class="script-header">
-            <span class="script-section-label">Script</span>
-            {#if wordCount > 0}
-              <span class="word-count">{wordCount} words</span>
-            {/if}
-          </div>
+      <section class="script-section">
+        <div class="script-header">
+          <span class="script-section-label">Script</span>
+          {#if wordCount > 0}
+            <span class="word-count">{wordCount} words</span>
+          {/if}
+        </div>
 
-          <textarea
-            class="script-textarea"
-            bind:value={script}
-            placeholder="Your script will appear here…"
-            rows={10}
-            aria-label="Generated script"
-          ></textarea>
+        <textarea
+          class="script-textarea"
+          bind:value={script}
+          placeholder="Your script will appear here…"
+          rows={10}
+          aria-label="Generated script"
+        ></textarea>
 
-          <div class="script-actions">
-            <button
-              type="button"
-              class="action-btn"
-              onclick={handleCopy}
-              disabled={!script}
-              aria-label="Copy script"
-            >
-              <img src="/icons/icon-copy.svg" alt="" class="action-icon" />
-              {copySuccess ? 'Copied!' : 'Copy'}
-            </button>
-
-            <button
-              type="button"
-              class="action-btn"
-              onclick={handleGenerate}
-              disabled={!topic.trim() || isGenerating}
-              aria-label="Regenerate script"
-            >
-              Regenerate
-            </button>
-          </div>
+        <div class="script-actions">
+          <button
+            type="button"
+            class="action-btn"
+            onclick={handleCopy}
+            disabled={!script}
+            aria-label="Copy script"
+          >
+            <img src="/icons/icon-copy.svg" alt="" class="action-icon" />
+            {copySuccess ? 'Copied!' : 'Copy'}
+          </button>
 
           <button
             type="button"
-            class="add-to-notes-btn"
-            onclick={handleAddToNotes}
-            disabled={!script}
+            class="action-btn"
+            onclick={handleGenerate}
+            disabled={!topic.trim() || isGenerating}
+            aria-label="Regenerate script"
           >
-            Add to recording notes →
+            Regenerate
           </button>
-        </section>
-      {/if}
+        </div>
 
-      <!-- Image suggestions -->
-      {#if imageSuggestions.length > 0}
-        <section class="suggestions-section">
-          <span class="suggestions-label">Image suggestions</span>
+        <button
+          type="button"
+          class="add-to-notes-btn"
+          onclick={handleAddToNotes}
+          disabled={!script}
+        >
+          Add to recording notes →
+        </button>
+      </section>
+
+      <!-- Image ideas -->
+      <section class="image-ideas-section">
+        <div class="script-header">
+          <span class="script-section-label">Image ideas</span>
+          {#if imageSuggestions.length > 0}
+            <span class="word-count">{imageSuggestions.length} suggestions</span>
+          {/if}
+        </div>
+
+        {#if imageSuggestions.length === 0}
+          <p class="image-ideas-placeholder">Image suggestions will appear here</p>
+        {:else}
           <ul class="suggestions-list">
             {#each imageSuggestions as suggestion, i}
               <li class="suggestion-item">
@@ -221,8 +227,8 @@
               </li>
             {/each}
           </ul>
-        </section>
-      {/if}
+        {/if}
+      </section>
     </div>
   </div>
 </div>
@@ -506,36 +512,47 @@
     cursor: not-allowed;
   }
 
-  /* Image suggestions */
-  .suggestions-section {
+  /* Image ideas section */
+  .image-ideas-section {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
     padding-bottom: var(--spacing-xl);
   }
 
-  .suggestions-label {
+  .image-ideas-placeholder {
     font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
+    color: var(--text-secondary);
+    margin: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-white);
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .suggestions-list {
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-white);
   }
 
   .suggestion-item {
     display: flex;
     gap: var(--spacing-sm);
     align-items: flex-start;
-    background: var(--bg-main);
+    background: transparent;
     border-radius: var(--radius-sm);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-sm) 0;
   }
 
   .suggestion-number {
@@ -543,7 +560,8 @@
     font-weight: var(--font-weight-bold);
     color: var(--color-primary);
     min-width: 16px;
-    padding-top: 1px;
+    padding-top: 2px;
+    flex-shrink: 0;
   }
 
   .suggestion-text {
