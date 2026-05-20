@@ -17,9 +17,14 @@
   let imageSuggestions = $state<string[]>([]);
   let isGenerating = $state(false);
   let generateError = $state<string | null>(null);
+  let showConfirmModal = $state(false);
 
   let wordCount = $derived(
     script.trim() ? script.trim().split(/\s+/).length : 0
+  );
+
+  let canClear = $derived(
+    audience.trim() || topic.trim() || url.trim() || script.trim() || imageSuggestions.length > 0
   );
 
   // ── Generate ──────────────────────────────────────────────────────────────────
@@ -49,6 +54,16 @@
     } finally {
       isGenerating = false;
     }
+  }
+
+  // ── Clear ─────────────────────────────────────────────────────────────────────
+  function handleClear() {
+    audience = '';
+    topic = '';
+    url = '';
+    script = '';
+    imageSuggestions = [];
+    showConfirmModal = false;
   }
 
   // ── Copy ──────────────────────────────────────────────────────────────────────
@@ -95,7 +110,7 @@
             id="audience-input"
             type="text"
             class="field-input"
-            placeholder="Who are you writing for?"
+            placeholder="Who, where?"
             bind:value={audience}
           />
         </div>
@@ -166,45 +181,39 @@
           {/if}
         </div>
 
-        <textarea
-          class="script-textarea"
-          bind:value={script}
-          placeholder="Your script will appear here…"
-          rows={10}
-          aria-label="Generated script"
-        ></textarea>
+        <div class="script-container">
+          <textarea
+            class="script-textarea"
+            bind:value={script}
+            placeholder="Your script will appear here…"
+            rows={10}
+            aria-label="Generated script"
+          ></textarea>
 
-        <div class="script-actions">
-          <button
-            type="button"
-            class="action-btn"
-            onclick={handleCopy}
-            disabled={!script}
-            aria-label="Copy script"
-          >
-            <img src="/icons/icon-copy.svg" alt="" class="action-icon" />
-            {copySuccess ? 'Copied!' : 'Copy'}
-          </button>
+          {#if script}
+            <div class="script-footer-buttons">
+              <button
+                type="button"
+                class="icon-text-btn"
+                onclick={handleCopy}
+                aria-label="Copy script"
+              >
+                <img src="/icons/icon-copy.svg" alt="" class="icon-text-icon" />
+                {copySuccess ? 'Copied!' : 'Copy'}
+              </button>
 
-          <button
-            type="button"
-            class="action-btn"
-            onclick={handleGenerate}
-            disabled={!topic.trim() || isGenerating}
-            aria-label="Regenerate script"
-          >
-            Regenerate
-          </button>
+              <button
+                type="button"
+                class="icon-text-btn"
+                onclick={handleAddToNotes}
+                aria-label="Read and record script"
+              >
+                <img src="/icons/icon-mic.svg" alt="" class="icon-text-icon" />
+                Read & Record
+              </button>
+            </div>
+          {/if}
         </div>
-
-        <button
-          type="button"
-          class="add-to-notes-btn"
-          onclick={handleAddToNotes}
-          disabled={!script}
-        >
-          Add to recording notes →
-        </button>
       </section>
 
       <!-- Image ideas -->
@@ -229,15 +238,63 @@
           </ul>
         {/if}
       </section>
+
+      <!-- Clear button -->
+      <div class="clear-button-container">
+        <button
+          type="button"
+          class="clear-btn"
+          onclick={() => (showConfirmModal = true)}
+          disabled={!canClear}
+          aria-label="Clear and create new script"
+        >
+          Clear & create new script
+        </button>
+      </div>
     </div>
   </div>
+
+  <!-- Confirmation modal -->
+  {#if showConfirmModal}
+    <div
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      tabindex="-1"
+      onclick={() => (showConfirmModal = false)}
+      onkeydown={(e) => e.key === 'Escape' && (showConfirmModal = false)}
+    >
+      <div class="modal" role="presentation" onclick={(e) => e.stopPropagation()}>
+        <div class="modal-header">
+          <span class="modal-title" id="modal-title">Start again?</span>
+        </div>
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="modal-btn modal-btn--cancel"
+            onclick={() => (showConfirmModal = false)}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="modal-btn modal-btn--confirm"
+            onclick={handleClear}
+          >
+            Yes
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
   .drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: transparent;
     z-index: 150;
     display: flex;
     flex-direction: column;
@@ -246,11 +303,11 @@
 
   .drawer {
     background: var(--bg-white);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-radius: 0;
     width: 100%;
-    max-width: 600px;
+    max-width: 480px;
+    height: 100%;
     margin: 0 auto;
-    height: 92vh;
     display: flex;
     flex-direction: column;
     animation: slideUp 0.25s ease-out;
@@ -334,7 +391,7 @@
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: var(--font-size-sm);
     color: var(--text-primary);
-    background: var(--bg-white);
+    background: #f5f5f5;
     width: 100%;
     box-sizing: border-box;
     transition: border-color 0.15s;
@@ -343,6 +400,15 @@
   .field-input:focus {
     outline: none;
     border-color: var(--color-primary);
+    background: #f5f5f5;
+  }
+
+  /* Remove autofill blue background */
+  .field-input:-webkit-autofill,
+  .field-input:-webkit-autofill:hover,
+  .field-input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
   }
 
   .duration-row {
@@ -439,10 +505,14 @@
     color: var(--text-secondary);
   }
 
+  .script-container {
+    position: relative;
+  }
+
   .script-textarea {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md) 40px var(--spacing-md);
     font-size: var(--font-size-sm);
     color: var(--text-primary);
     background: var(--bg-white);
@@ -459,57 +529,44 @@
     border-color: var(--color-primary);
   }
 
-  .script-actions {
+  .script-footer-buttons {
+    position: absolute;
+    bottom: var(--spacing-lg);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
     display: flex;
+    justify-content: space-between;
     gap: var(--spacing-sm);
+    pointer-events: none;
   }
 
-  .action-btn {
+  .icon-text-btn {
     display: inline-flex;
     align-items: center;
     gap: var(--spacing-xs);
-    background: var(--bg-main);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--spacing-xs) var(--spacing-md);
+    background: none;
+    border: none;
+    padding: 0;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     color: var(--text-primary);
     cursor: pointer;
-    transition: background 0.15s;
+    transition: opacity 0.15s;
+    pointer-events: all;
   }
 
-  .action-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+  .icon-text-btn:hover {
+    color: var(--color-primary);
   }
 
-  .action-btn:not(:disabled):hover {
-    background: var(--color-highlight);
+  .icon-text-btn:hover .icon-text-icon {
+    opacity: 1;
   }
 
-  .action-icon {
+  .icon-text-icon {
     width: 14px;
     height: 14px;
     opacity: 0.7;
-  }
-
-  .add-to-notes-btn {
-    background: none;
-    border: none;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-primary);
-    cursor: pointer;
-    padding: var(--spacing-xs) 0;
-    text-align: left;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .add-to-notes-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
   }
 
   /* Image ideas section */
@@ -517,7 +574,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
-    padding-bottom: var(--spacing-xl);
+    padding-bottom: 0;
   }
 
   .image-ideas-placeholder {
@@ -530,8 +587,8 @@
     background: var(--bg-white);
     min-height: 120px;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
   }
 
   .suggestions-list {
@@ -540,7 +597,7 @@
     padding: var(--spacing-sm) var(--spacing-md);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: 0;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: var(--bg-white);
@@ -568,5 +625,107 @@
     font-size: var(--font-size-sm);
     color: var(--text-primary);
     line-height: var(--line-height-normal);
+  }
+
+  /* Clear button */
+  .clear-button-container {
+    display: flex;
+    justify-content: center;
+    padding: 0 var(--spacing-lg) var(--spacing-lg);
+  }
+
+  .clear-btn {
+    background: none;
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s;
+    text-decoration: underline;
+  }
+
+  .clear-btn:not(:disabled):hover {
+    color: var(--text-primary);
+  }
+
+  .clear-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .modal {
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: scaleIn 0.15s ease-out;
+  }
+
+  @keyframes scaleIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .modal-header {
+    text-align: center;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .modal-title {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+  }
+
+  .modal-btn {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-white);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .modal-btn:hover {
+    border-color: var(--color-border-active);
+  }
+
+  .modal-btn--confirm {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+  }
+
+  .modal-btn--confirm:hover {
+    opacity: 0.88;
   }
 </style>

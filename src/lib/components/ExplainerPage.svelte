@@ -1,6 +1,7 @@
 <script lang="ts">
   import VoiceoverImagesDrawer from './explainer/VoiceoverImagesDrawer.svelte';
   import ScriptDrawer from './explainer/ScriptDrawer.svelte';
+  import RecordingDrawer from './explainer/RecordingDrawer.svelte';
   import KenBurnsPreview from './explainer/KenBurnsPreview.svelte';
   import ArchivePage from './explainer/ArchivePage.svelte';
   import {
@@ -22,6 +23,7 @@
   // ── UI state ─────────────────────────────────────────────────────────────────
   let showVoiceoverDrawer = $state(false);
   let showScriptDrawer = $state(false);
+  let showRecordingDrawer = $state(false);
   let showArchive = $state(false);
   let isExporting = $state(false);
   let exportProgress = $state<ExportProgress | null>(null);
@@ -63,6 +65,27 @@
   // ── Script drawer ─────────────────────────────────────────────────────────────
   function handleScriptAddToNotes(script: string) {
     project = { ...project, script };
+    showScriptDrawer = false;
+    showRecordingDrawer = true;
+  }
+
+  // ── Recording drawer ──────────────────────────────────────────────────────
+  function handleRecordingSave(audioBlob: Blob) {
+    // Save the recording as voiceover audio
+    const audioElement = new Audio();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    audioElement.src = audioUrl;
+    audioElement.onloadedmetadata = () => {
+      const updates: Partial<VideoProject> = {
+        audio: {
+          blob: audioBlob,
+          duration: audioElement.duration,
+        },
+      };
+      handleVoiceoverSave(updates);
+      showRecordingDrawer = false;
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
   }
 
   // ── Voiceover drawer ─────────────────────────────────────────────────────────
@@ -484,6 +507,15 @@
   <ScriptDrawer
     onAddToNotes={handleScriptAddToNotes}
     onClose={() => (showScriptDrawer = false)}
+  />
+{/if}
+
+<!-- Recording drawer -->
+{#if showRecordingDrawer}
+  <RecordingDrawer
+    script={project.script ?? null}
+    onSave={handleRecordingSave}
+    onClose={() => (showRecordingDrawer = false)}
   />
 {/if}
 

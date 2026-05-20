@@ -320,7 +320,7 @@
               style="width: {audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%"
             ></div>
           </div>
-          <span class="duration-label">{formatTime(currentTime)} / {formatTime(audioDuration)}</span>
+          <span class="duration-label">{formatTime(currentTime)}</span>
         </div>
       {/if}
 
@@ -405,7 +405,6 @@
   .drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
     z-index: 100;
     display: flex;
     flex-direction: column;
@@ -414,20 +413,16 @@
 
   .drawer {
     background: var(--bg-white);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-radius: 0;
     width: 100%;
-    max-width: 600px;
+    max-width: 480px;
     margin: 0 auto;
-    height: 92vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    animation: slideUp 0.25s ease-out;
+    animation: none;
   }
 
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
-  }
 
   .drawer-header {
     display: flex;

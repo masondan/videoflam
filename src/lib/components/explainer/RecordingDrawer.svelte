@@ -1,11 +1,26 @@
 <script lang="ts">
   interface Props {
     script: string | null;
+    onScriptChange?: (script: string) => void;
     onSave: (blob: Blob) => void;
     onClose: () => void;
   }
 
-  let { script, onSave, onClose }: Props = $props();
+  let { script, onScriptChange, onSave, onClose }: Props = $props();
+
+  let scriptText = $state(script || '');
+
+  function handleScriptInput(e: Event) {
+    const target = e.currentTarget as HTMLDivElement;
+    scriptText = target.textContent || '';
+    onScriptChange?.(scriptText);
+  }
+
+  function handleScriptPaste(e: ClipboardEvent) {
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') || '';
+    document.execCommand('insertText', false, text);
+  }
 
   // ── Text size preference ──────────────────────────────────────────────────────
   const TEXT_SIZE_KEY = 'explainer-recording-text-size';
@@ -159,7 +174,7 @@
     <!-- Header -->
     <header class="drawer-header">
       <button type="button" class="close-btn" onclick={() => { cleanup(); onClose(); }} aria-label="Close">✕</button>
-      <span class="drawer-title">Recording notes</span>
+      <span class="drawer-title">Read & Record</span>
       <div class="header-spacer"></div>
     </header>
 
@@ -167,7 +182,7 @@
       <!-- Script display -->
       <div class="script-section">
         <div class="text-size-row">
-          <span class="text-size-label">Text size</span>
+          <img src="/icons/icon-text-size.svg" alt="" class="text-size-icon" />
           <button
             type="button"
             class="size-btn"
@@ -186,11 +201,16 @@
         <div
           class="script-text"
           style="font-size: {textSize}px;"
+          contenteditable="true"
+          oninput={handleScriptInput}
+          onpaste={handleScriptPaste}
+          role="textbox"
+          aria-label="Script text editor"
         >
-          {#if script}
-            {script}
+          {#if scriptText}
+            {scriptText}
           {:else}
-            <span class="script-placeholder">Paste or push script here. Use the Script Generator to create one, then tap "Add to recording notes".</span>
+            <span class="script-placeholder">Paste script here or use the script generator and tap 'Read & Record'</span>
           {/if}
         </div>
       </div>
@@ -206,15 +226,23 @@
       {#if recordingState === 'idle'}
         <button
           type="button"
-          class="record-btn record-btn--idle"
+          class="ctrl-btn"
           onclick={startRecording}
           aria-label="Start recording"
         >
-          <span class="record-dot"></span>
+          <img src="/icons/icon-mic.svg" alt="Record" class="ctrl-icon" />
         </button>
         <span class="record-hint">Tap to record</span>
 
       {:else if recordingState === 'recording'}
+        <button
+          type="button"
+          class="ctrl-btn"
+          onclick={stopRecording}
+          aria-label="Stop recording"
+        >
+          <img src="/icons/icon-square-new.svg" alt="Stop" class="ctrl-icon" />
+        </button>
         <!-- Waveform bars -->
         <div class="waveform" aria-hidden="true">
           {#each waveformBars as height, i}
@@ -225,14 +253,6 @@
           {/each}
         </div>
         <span class="timer">{formatTime(elapsedSeconds)}</span>
-        <button
-          type="button"
-          class="record-btn record-btn--stop"
-          onclick={stopRecording}
-          aria-label="Stop recording"
-        >
-          <span class="stop-square"></span>
-        </button>
 
       {:else if recordingState === 'review'}
         <!-- Review player -->
@@ -246,17 +266,21 @@
         ></audio>
         <button
           type="button"
-          class="review-play-btn"
+          class="ctrl-btn"
           onclick={toggleReviewPlayback}
           aria-label={isReviewPlaying ? 'Pause' : 'Play recording'}
         >
           <img
-            src={isReviewPlaying ? '/icons/icon-pause-fill.svg' : '/icons/icon-play-fill.svg'}
+            src={isReviewPlaying ? '/icons/icon-pause-new.svg' : '/icons/icon-play-new.svg'}
             alt={isReviewPlaying ? 'Pause' : 'Play'}
-            class="review-play-icon"
+            class="ctrl-icon"
           />
         </button>
-        <span class="review-label">Review</span>
+        <div class="waveform waveform--static" aria-hidden="true">
+          {#each waveformBars as _, i}
+            <div class="waveform-bar waveform-bar--static"></div>
+          {/each}
+        </div>
         <div class="review-actions">
           <button type="button" class="re-record-btn" onclick={handleReRecord}>
             Re-record
@@ -274,7 +298,6 @@
   .drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
     z-index: 200;
     display: flex;
     flex-direction: column;
@@ -283,20 +306,16 @@
 
   .drawer {
     background: var(--bg-white);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-radius: 0;
     width: 100%;
-    max-width: 600px;
+    max-width: 480px;
     margin: 0 auto;
-    height: 92vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    animation: slideUp 0.25s ease-out;
+    animation: none;
   }
 
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
-  }
 
   .drawer-header {
     display: flex;
@@ -346,22 +365,24 @@
   .text-size-row {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--spacing-sm);
   }
 
-  .text-size-label {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    flex: 1;
+  .text-size-icon {
+    width: 18px;
+    height: 18px;
+    color: #aaaaaa;
+    margin-right: 0;
   }
 
   .size-btn {
     background: var(--bg-main);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    width: 32px;
-    height: 32px;
-    font-size: var(--font-size-base);
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
     font-weight: var(--font-weight-bold);
     color: var(--text-primary);
     cursor: pointer;
@@ -387,11 +408,24 @@
     overflow-y: auto;
     flex: 1;
     min-height: 200px;
+    padding-top: var(--spacing-xl);
+    padding: var(--spacing-md);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    outline: none;
+    word-wrap: break-word;
+  }
+
+  .script-text:focus {
+    border-color: var(--color-primary);
+    background-color: #fafafa;
   }
 
   .script-placeholder {
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
-    font-style: italic;
+    text-align: center;
+    display: block;
   }
 
   .error-banner {
@@ -414,42 +448,27 @@
     min-height: 80px;
   }
 
-  /* Record button */
-  .record-btn {
-    width: 52px;
-    height: 52px;
+  /* Consistent control button — all three states */
+  .ctrl-btn {
+    width: 44px;
+    height: 44px;
     border-radius: var(--radius-round);
     border: none;
+    background: var(--color-primary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: transform 0.15s;
+    transition: transform 0.15s, opacity 0.15s;
   }
 
-  .record-btn:active { transform: scale(0.93); }
+  .ctrl-btn:active { transform: scale(0.93); }
 
-  .record-btn--idle {
-    background: #e53e3e;
-  }
-
-  .record-btn--stop {
-    background: #e53e3e;
-  }
-
-  .record-dot {
-    width: 20px;
-    height: 20px;
-    border-radius: var(--radius-round);
-    background: #fff;
-  }
-
-  .stop-square {
-    width: 16px;
-    height: 16px;
-    border-radius: 3px;
-    background: #fff;
+  .ctrl-icon {
+    width: 22px;
+    height: 22px;
+    filter: brightness(0) invert(1);
   }
 
   .record-hint {
@@ -474,6 +493,12 @@
     min-height: 4px;
   }
 
+  .waveform--static .waveform-bar--static {
+    animation: none;
+    height: 40%;
+    opacity: 0.3;
+  }
+
   @keyframes waveform-pulse {
     from { height: 20%; }
     to   { height: 90%; }
@@ -488,25 +513,6 @@
   }
 
   /* Review */
-  .review-play-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
-  }
-
-  .review-play-icon {
-    width: 36px;
-    height: 36px;
-  }
-
-  .review-label {
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
-    flex: 1;
-  }
-
   .review-actions {
     display: flex;
     gap: var(--spacing-sm);
