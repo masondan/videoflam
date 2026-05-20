@@ -1,5 +1,9 @@
 <script lang="ts">
   import VideoSubtitlePage from '$lib/components/VideoSubtitlePage.svelte';
+  import ExplainerPage from '$lib/components/ExplainerPage.svelte';
+
+  type Tab = 'subtitle' | 'explainer';
+  let activeTab = $state<Tab>('subtitle');
 </script>
 
 <div class="app-container">
@@ -11,8 +15,36 @@
     <div class="header-spacer"></div>
   </header>
 
+  <!-- Tab bar -->
+  <nav class="tab-bar" aria-label="App sections">
+    <button
+      type="button"
+      class="tab-btn"
+      class:tab-btn--active={activeTab === 'subtitle'}
+      onclick={() => (activeTab = 'subtitle')}
+      aria-selected={activeTab === 'subtitle'}
+      role="tab"
+    >
+      Subtitle
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      class:tab-btn--active={activeTab === 'explainer'}
+      onclick={() => (activeTab = 'explainer')}
+      aria-selected={activeTab === 'explainer'}
+      role="tab"
+    >
+      Explainer
+    </button>
+  </nav>
+
   <main class="main-content">
-    <VideoSubtitlePage />
+    {#if activeTab === 'subtitle'}
+      <VideoSubtitlePage />
+    {:else}
+      <ExplainerPage />
+    {/if}
   </main>
 </div>
 
@@ -46,6 +78,37 @@
 
   .logotype {
     height: 26px;
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--bg-white);
+    padding: 0 var(--spacing-lg);
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px; /* overlap container border */
+  }
+
+  .tab-btn--active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .tab-btn:hover:not(.tab-btn--active) {
+    color: var(--text-primary);
   }
 
   .main-content {
