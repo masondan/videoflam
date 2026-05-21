@@ -87,7 +87,7 @@ class FlamNav extends HTMLElement {
 			{ id: 'audioflam', name: 'AudioFlam', url: 'https://audioflam.flamtools.com' },
 			{ id: 'chartflam', name: 'ChartFlam', url: 'https://chartflam.flamtools.com' },
 			{ id: 'mapflam', name: 'MapFlam', url: 'https://mapflam.flamtools.com' },
-			{ id: 'subflam', name: 'SubFlam', url: 'https://subflam.flamtools.com' },
+			{ id: 'videoflam', name: 'VideoFlam', url: 'https://videoflam.flamtools.com' },
 			{ id: 'storyflam', name: 'StoryFlam', url: 'https://storyflam.flamtools.com', training: true },
 			{ id: 'flamit', name: 'FlamIt', url: 'https://flamit.flamtools.com', training: true }
 		];

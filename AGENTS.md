@@ -1,6 +1,6 @@
-# SubFlam - AI Agent Reference
+# VideoFlam - AI Agent Reference
 
-**Purpose:** Single-source-of-truth for AI agents working on SubFlam
+**Purpose:** Single-source-of-truth for AI agents working on VideoFlam
 **Status:** Production (Video Subtitle + Title Overlay Complete)
 **Updated:** May 2026 (Deepgram Nova-3 Integration)
 
@@ -8,7 +8,7 @@
 
 ## Quick Start
 
-**What is SubFlam?** A mobile-first web app that adds subtitles and title overlays to uploaded videos using Deepgram transcription, with real-time canvas preview and MP4 export.
+**What is VideoFlam?** A mobile-first web app that adds subtitles and title overlays to uploaded videos using Deepgram transcription, with real-time canvas preview and MP4 export.
 
 **Tech Stack:**
 - SvelteKit 2 + Svelte 5 (TypeScript)
@@ -45,7 +45,7 @@ src/
 │       ├── transcribe-deepgram/+server.ts  # Deepgram Nova-3 transcription
 │       └── transcode/+server.ts            # Cloud video transcoding (api.video)
 ├── lib/
-│   ├── stores.ts                 # Empty (minimal stores for SubFlam)
+│   ├── stores.ts                 # Empty (minimal stores for VideoFlam)
 │   ├── components/
 │   │   ├── VideoSubtitlePage.svelte  # Main app (1483 lines)
 │   │   │   ├── Video upload & preview
@@ -660,7 +660,7 @@ All CSS variables defined in [`src/app.css`](src/app.css).
 
 ## Navigating the Codebase by Task
 
-### Getting Started with SubFlam
+### Getting Started with VideoFlam
 1. **Read this file (AGENTS.md)** - 5 minutes for complete overview
 2. **Check "Critical Rules & Gotchas"** - Avoid breaking patterns
 3. **Check "Common Pitfalls for Agents"** - Learn from past mistakes

@@ -17,9 +17,9 @@
 
 <div class="app-container">
   <header class="app-header">
-    <flam-nav current="subflam"></flam-nav>
+    <flam-nav current="videoflam"></flam-nav>
     <div class="header-center">
-      <img src="/icons/logo-subflam-logotype.png" alt="SubFlam" class="logotype" />
+      <img src="/logos/logo-videoflam-logotype.png" alt="VideoFlam" class="logotype" />
     </div>
     <div class="header-spacer"></div>
   </header>

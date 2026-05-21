@@ -20,8 +20,8 @@ import type {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const LS_KEY = 'subflam-explainer-projects';
-const IDB_NAME = 'subflam-media';
+const LS_KEY = 'videoflam-explainer-projects';
+const IDB_NAME = 'videoflam-media';
 const IDB_VERSION = 1;
 const IDB_STORE = 'blobs';
 
