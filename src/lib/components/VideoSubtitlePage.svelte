@@ -5,6 +5,7 @@
   import { drawSubtitle, getActiveSegment, DEFAULT_SUBTITLE_STYLE, type FontSize } from '$lib/utils/subtitles';
   import type { SubtitleSegment, SubtitleStyle } from '$lib/utils/subtitles';
   import { smartExportVideo, downloadBlob, generateFilename, generateSubtitleFilename, getExtensionFromMimeType, type ExportProgress } from '$lib/utils/video-export';
+  import { interimVideoStore } from '$lib/stores/interimVideo';
 
   // Video state
   let videoBlob: Blob | null = $state(null);
@@ -723,6 +724,14 @@
   onMount(() => {
     if (canvasElement) {
       canvasContext = canvasElement.getContext('2d');
+    }
+
+    // Check if an explainer video was passed via the interim store
+    const interim = interimVideoStore.consume();
+    if (interim) {
+      const ext = interim.mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([interim.blob], `explainer.${ext}`, { type: interim.mimeType });
+      handleVideoUpload(file);
     }
 
     return () => {
