@@ -1,20 +1,41 @@
 <script lang="ts">
   interface Props {
+    audience: string;
+    topic: string;
+    url: string;
+    duration: '30s' | '1min' | '2min';
+    script: string;
+    imageSuggestions: string[];
+    onAudienceChange: (v: string) => void;
+    onTopicChange: (v: string) => void;
+    onUrlChange: (v: string) => void;
+    onDurationChange: (v: '30s' | '1min' | '2min') => void;
+    onScriptChange: (v: string) => void;
+    onImageSuggestionsChange: (v: string[]) => void;
     onAddToNotes: (script: string) => void;
+    onClear: () => void;
     onClose: () => void;
   }
 
-  let { onAddToNotes, onClose }: Props = $props();
+  let {
+    audience,
+    topic,
+    url,
+    duration,
+    script,
+    imageSuggestions,
+    onAudienceChange,
+    onTopicChange,
+    onUrlChange,
+    onDurationChange,
+    onScriptChange,
+    onImageSuggestionsChange,
+    onAddToNotes,
+    onClear,
+    onClose,
+  }: Props = $props();
 
-  // ── Form state ────────────────────────────────────────────────────────────────
-  let audience = $state('');
-  let topic = $state('');
-  let url = $state('');
-  let duration = $state<'30s' | '1min' | '2min'>('1min');
-
-  // ── Script state ──────────────────────────────────────────────────────────────
-  let script = $state('');
-  let imageSuggestions = $state<string[]>([]);
+  // ── Local UI state ────────────────────────────────────────────────────────────
   let isGenerating = $state(false);
   let generateError = $state<string | null>(null);
   let showConfirmModal = $state(false);
@@ -46,8 +67,8 @@
         throw new Error(data.error ?? `Request failed: ${res.status}`);
       }
 
-      script = data.script ?? '';
-      imageSuggestions = Array.isArray(data.imageSuggestions) ? data.imageSuggestions : [];
+      onScriptChange(data.script ?? '');
+      onImageSuggestionsChange(Array.isArray(data.imageSuggestions) ? data.imageSuggestions : []);
     } catch (err) {
       generateError = err instanceof Error ? err.message : 'Script generation failed';
       console.error('[ScriptDrawer] Generate error:', err);
@@ -58,11 +79,7 @@
 
   // ── Clear ─────────────────────────────────────────────────────────────────────
   function handleClear() {
-    audience = '';
-    topic = '';
-    url = '';
-    script = '';
-    imageSuggestions = [];
+    onClear();
     showConfirmModal = false;
   }
 
@@ -111,7 +128,8 @@
             type="text"
             class="field-input"
             placeholder="Who, where?"
-            bind:value={audience}
+            value={audience}
+            oninput={(e) => onAudienceChange((e.target as HTMLInputElement).value)}
           />
         </div>
 
@@ -122,7 +140,8 @@
             type="text"
             class="field-input"
             placeholder="What's the story?"
-            bind:value={topic}
+            value={topic}
+            oninput={(e) => onTopicChange((e.target as HTMLInputElement).value)}
           />
         </div>
 
@@ -133,7 +152,8 @@
             type="url"
             class="field-input"
             placeholder="Add the URL of a related article"
-            bind:value={url}
+            value={url}
+            oninput={(e) => onUrlChange((e.target as HTMLInputElement).value)}
           />
         </div>
 
@@ -145,7 +165,7 @@
                 type="button"
                 class="duration-btn"
                 class:duration-btn--active={duration === d}
-                onclick={() => (duration = d)}
+                onclick={() => onDurationChange(d)}
               >
                 {d === '30s' ? '30 sec' : d === '1min' ? '1 min' : '2 min'}
               </button>
@@ -184,7 +204,8 @@
         <div class="script-container">
           <textarea
             class="script-textarea"
-            bind:value={script}
+            value={script}
+            oninput={(e) => onScriptChange((e.target as HTMLTextAreaElement).value)}
             placeholder="Your script will appear here…"
             rows={10}
             aria-label="Generated script"

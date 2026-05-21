@@ -309,7 +309,7 @@
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             <img
-              src={isPlaying ? '/icons/icon-pause-fill.svg' : '/icons/icon-play-fill.svg'}
+              src={isPlaying ? '/icons/icon-pause-new.svg' : '/icons/icon-play-new.svg'}
               alt={isPlaying ? 'Pause' : 'Play'}
               class="play-icon"
             />
@@ -356,7 +356,11 @@
       {:else if !isTranscribing && audioUrl}
         <p class="empty-hint">No transcript yet — upload audio to generate panels.</p>
       {:else if !audioUrl}
-        <p class="empty-hint">Upload a voiceover to get started.</p>
+        <ul class="empty-hint-list">
+          <li><strong>Upload</strong> a clear recording or <strong>record</strong> your own voiceover.</li>
+          <li>Your audio is converted to text blocks. Adjust and add images.</li>
+          <li>Save to preview your video, add effects and export.</li>
+        </ul>
       {/if}
     </div>
   </div>
@@ -471,12 +475,14 @@
   .upload-section {
     display: flex;
     gap: var(--spacing-sm);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .upload-btn {
-    display: inline-flex;
+    flex: 1;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--spacing-xs);
     background: var(--color-primary);
     color: #fff;
@@ -492,8 +498,10 @@
   .upload-btn:hover { opacity: 0.88; }
 
   .record-btn {
-    display: inline-flex;
+    flex: 1;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--spacing-xs);
     background: var(--bg-main);
     color: var(--text-primary);
@@ -533,30 +541,42 @@
   }
 
   .play-pause-btn {
-    background: none;
+    width: 25px;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
     border: none;
+    border-radius: 50%;
     cursor: pointer;
     padding: 0;
     flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+
+  .play-pause-btn:hover {
+    opacity: 0.85;
   }
 
   .play-icon {
-    width: 28px;
-    height: 28px;
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) invert(1);
   }
 
   .progress-track {
     flex: 1;
     height: 4px;
     background: var(--color-border);
-    border-radius: 2px;
+    border-radius: var(--radius-md);
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
     background: var(--color-primary);
-    border-radius: 2px;
+    border-radius: var(--radius-md);
     transition: width 0.1s linear;
   }
 
@@ -565,6 +585,8 @@
     color: var(--text-secondary);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    min-width: 36px;
+    text-align: right;
   }
 
   /* Transcribing */
@@ -613,6 +635,35 @@
     text-align: center;
     padding: var(--spacing-xl) 0;
     margin: 0;
+  }
+
+  .empty-hint-list {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    padding: var(--spacing-xl) var(--spacing-md);
+    margin: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .empty-hint-list li {
+    text-align: center;
+    line-height: var(--line-height-normal);
+    position: relative;
+  }
+
+  .empty-hint-list li:not(:last-child)::after {
+    content: '';
+    display: block;
+    width: 40%;
+    height: 1px;
+    background: var(--color-border);
+    margin-top: var(--spacing-md);
+    margin-bottom: var(--spacing-xs);
+    margin-left: auto;
+    margin-right: auto;
   }
 
   /* Save modal */

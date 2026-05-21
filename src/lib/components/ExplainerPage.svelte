@@ -62,11 +62,27 @@
     project = { ...project, kenBurns: preset };
   }
 
-  // ── Script drawer ─────────────────────────────────────────────────────────────
+  // ── Script drawer persisted state ─────────────────────────────────────────────
+  let scriptDraftAudience = $state('');
+  let scriptDraftTopic = $state('');
+  let scriptDraftUrl = $state('');
+  let scriptDraftDuration = $state<'30s' | '1min' | '2min'>('1min');
+  let scriptDraftScript = $state('');
+  let scriptDraftImageSuggestions = $state<string[]>([]);
+
   function handleScriptAddToNotes(script: string) {
     project = { ...project, script };
     showScriptDrawer = false;
     showRecordingDrawer = true;
+  }
+
+  function handleScriptClear() {
+    scriptDraftAudience = '';
+    scriptDraftTopic = '';
+    scriptDraftUrl = '';
+    scriptDraftDuration = '1min';
+    scriptDraftScript = '';
+    scriptDraftImageSuggestions = [];
   }
 
   // ── Recording drawer ──────────────────────────────────────────────────────
@@ -135,6 +151,19 @@
     }
   }
 
+  function drawCheckerboard(ctx: CanvasRenderingContext2D, width: number, height: number, squareSize: number = 8) {
+    const light = '#e0e0e0';
+    const dark = '#c0c0c0';
+    
+    for (let y = 0; y < height; y += squareSize) {
+      for (let x = 0; x < width; x += squareSize) {
+        const isEven = (Math.floor(x / squareSize) + Math.floor(y / squareSize)) % 2 === 0;
+        ctx.fillStyle = isEven ? light : dark;
+        ctx.fillRect(x, y, squareSize, squareSize);
+      }
+    }
+  }
+
   function renderPreviewLoop() {
     if (!previewAudioEl || !previewEl) return;
     previewTime = previewAudioEl.currentTime;
@@ -142,8 +171,9 @@
     const ctx = previewEl.getContext('2d');
     if (ctx) {
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      
+      // Draw checkerboard for letterbox areas
+      drawCheckerboard(ctx, canvasWidth, canvasHeight);
 
       // Find active panel at current time
       let activePanel = project.panels.find(
@@ -265,6 +295,7 @@
     isPreviewPlaying = false;
     currentProjectId = undefined;
     project = createDefaultProject();
+    handleScriptClear();
   }
 </script>
 
@@ -290,18 +321,7 @@
       aria-label="Saved projects"
       onclick={() => (showArchive = true)}
     >
-      <img src="/icons/icon-edit.svg" alt="" class="archive-icon" />
-    </button>
-  </div>
-
-  <!-- Script generator text button -->
-  <div class="script-row">
-    <button
-      type="button"
-      class="script-link-btn"
-      onclick={() => (showScriptDrawer = true)}
-    >
-      Need a script? Start here →
+      <img src="/icons/icon-archive.svg" alt="" class="archive-icon" />
     </button>
   </div>
 
@@ -310,23 +330,84 @@
     <button
       type="button"
       class="voiceover-btn"
-      class:voiceover-btn--done={hasAudio && allImagesAssigned}
+      class:voiceover-btn--done={hasAudio}
       onclick={() => (showVoiceoverDrawer = true)}
     >
-      <img src="/icons/icon-mic-fill.svg" alt="" class="voiceover-icon" />
-      <span class="voiceover-label">Voiceover &amp; Images</span>
-      {#if hasAudio}
-        <span class="completion-badge">
-          {#if allImagesAssigned}
-            <img src="/icons/icon-check-fill.svg" alt="Complete" class="check-icon" />
-          {:else if totalPanels > 0}
-            <span class="image-count">{assignedCount} / {totalPanels}</span>
-          {:else}
-            <img src="/icons/icon-check-fill.svg" alt="Audio ready" class="check-icon" />
-          {/if}
-        </span>
-      {/if}
+      <span class="voiceover-label">{hasAudio ? 'Edit' : 'Add'} Voiceover &amp; Images</span>
+      <div class="voiceover-icons">
+        <img src="/icons/icon-mic-fill.svg" alt="" class="voiceover-icon" />
+        <img src="/icons/icon-image.svg" alt="" class="voiceover-icon" />
+      </div>
     </button>
+
+    <!-- Script generator text button -->
+    {#if !hasAudio}
+      <div class="script-row">
+        <button
+          type="button"
+          class="script-link-btn"
+          onclick={() => (showScriptDrawer = true)}
+        >
+          Need a script? Start here
+          <svg class="script-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    {/if}
+
+    <!-- Video preview placeholder or preview -->
+    {#if showPreview}
+      <div class="preview-section">
+        <div
+          class="preview-canvas-wrapper"
+          style="aspect-ratio: {canvasWidth} / {canvasHeight};"
+        >
+          <canvas
+            bind:this={previewEl}
+            width={canvasWidth}
+            height={canvasHeight}
+            class="preview-canvas"
+          ></canvas>
+          <!-- svelte-ignore a11y_media_has_caption -->
+          <audio
+            bind:this={previewAudioEl}
+            src={previewAudioUrl}
+            onended={handlePreviewEnded}
+            preload="metadata"
+            style="display:none"
+          ></audio>
+        </div>
+      </div>
+
+      <!-- Preview controls bar -->
+      <div class="preview-controls">
+        <button
+          type="button"
+          class="preview-play-btn"
+          onclick={togglePreview}
+          aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+        >
+          <img
+            src={isPreviewPlaying ? '/icons/icon-pause-new.svg' : '/icons/icon-play-new.svg'}
+            alt={isPreviewPlaying ? 'Pause' : 'Play'}
+            class="preview-play-icon"
+          />
+        </button>
+        <div class="preview-progress-track">
+          <div
+            class="preview-progress-fill"
+            style="width: {previewDuration > 0 ? (previewTime / previewDuration) * 100 : 0}%"
+          ></div>
+        </div>
+        <span class="preview-time">{formatTime(previewTime)}</span>
+      </div>
+    {:else}
+      <!-- Video preview placeholder -->
+      <div class="video-placeholder">
+        <img src="/icons/icon-video.svg" alt="" class="placeholder-watermark" />
+      </div>
+    {/if}
   </div>
 
   <!-- Pan & Zoom (Ken Burns) -->
@@ -404,54 +485,6 @@
     {/if}
   </div>
 
-  <!-- Preview window -->
-  {#if showPreview}
-    <div class="preview-section">
-      <div
-        class="preview-canvas-wrapper"
-        style="aspect-ratio: {canvasWidth} / {canvasHeight};"
-      >
-        <canvas
-          bind:this={previewEl}
-          width={canvasWidth}
-          height={canvasHeight}
-          class="preview-canvas"
-        ></canvas>
-        <!-- svelte-ignore a11y_media_has_caption -->
-        <audio
-          bind:this={previewAudioEl}
-          src={previewAudioUrl}
-          onended={handlePreviewEnded}
-          preload="metadata"
-          style="display:none"
-        ></audio>
-      </div>
-
-      <!-- Preview controls -->
-      <div class="preview-controls">
-        <button
-          type="button"
-          class="preview-play-btn"
-          onclick={togglePreview}
-          aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
-        >
-          <img
-            src={isPreviewPlaying ? '/icons/icon-pause-fill.svg' : '/icons/icon-play-fill.svg'}
-            alt={isPreviewPlaying ? 'Pause' : 'Play'}
-            class="preview-play-icon"
-          />
-        </button>
-        <div class="preview-progress-track">
-          <div
-            class="preview-progress-fill"
-            style="width: {previewDuration > 0 ? (previewTime / previewDuration) * 100 : 0}%"
-          ></div>
-        </div>
-        <span class="preview-time">{formatTime(previewTime)}</span>
-      </div>
-    </div>
-  {/if}
-
   <!-- Export progress -->
   {#if isExporting && exportProgress}
     <div class="export-progress">
@@ -505,7 +538,20 @@
 <!-- Script drawer -->
 {#if showScriptDrawer}
   <ScriptDrawer
+    audience={scriptDraftAudience}
+    topic={scriptDraftTopic}
+    url={scriptDraftUrl}
+    duration={scriptDraftDuration}
+    script={scriptDraftScript}
+    imageSuggestions={scriptDraftImageSuggestions}
+    onAudienceChange={(v) => (scriptDraftAudience = v)}
+    onTopicChange={(v) => (scriptDraftTopic = v)}
+    onUrlChange={(v) => (scriptDraftUrl = v)}
+    onDurationChange={(v) => (scriptDraftDuration = v)}
+    onScriptChange={(v) => (scriptDraftScript = v)}
+    onImageSuggestionsChange={(v) => (scriptDraftImageSuggestions = v)}
     onAddToNotes={handleScriptAddToNotes}
+    onClear={handleScriptClear}
     onClose={() => (showScriptDrawer = false)}
   />
 {/if}
@@ -560,23 +606,32 @@
   /* Script link */
   .script-row {
     display: flex;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .script-link-btn {
     background: none;
     border: none;
     font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    text-decoration: none;
     transition: color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
   }
 
   .script-link-btn:hover {
     color: var(--color-primary);
+  }
+
+  .script-chevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 
   /* Ratio row */
@@ -654,7 +709,12 @@
   .voiceover-btn:hover { opacity: 0.88; }
 
   .voiceover-btn--done {
-    background: #2d6a3f;
+    background: var(--color-highlight);
+    color: var(--color-primary);
+  }
+
+  .voiceover-btn--done .voiceover-icon {
+    filter: brightness(0) saturate(100%) invert(25%) sepia(100%) saturate(2000%) hue-rotate(240deg);
   }
 
   .voiceover-icon {
@@ -667,6 +727,12 @@
   .voiceover-label {
     flex: 1;
     text-align: left;
+  }
+
+  .voiceover-icons {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
   }
 
   .completion-badge {
@@ -686,6 +752,24 @@
     background: rgba(255,255,255,0.25);
     border-radius: var(--radius-sm);
     padding: 2px 6px;
+  }
+
+  /* Video placeholder */
+  .video-placeholder {
+    width: 100%;
+    aspect-ratio: 1;
+    background: #e8e8e8;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .placeholder-watermark {
+    width: 50%;
+    height: 50%;
+    opacity: 1;
+    filter: brightness(0) invert(1);
   }
 
   /* Settings blocks */
@@ -774,18 +858,18 @@
   .preview-section {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
-    background: var(--bg-main);
+    gap: 0;
+    width: 100%;
     border-radius: var(--radius-md);
-    padding: var(--spacing-sm);
+    overflow: hidden;
   }
 
   .preview-canvas-wrapper {
     width: 100%;
     max-height: 320px;
     overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: #000;
+    border-radius: var(--radius-md);
+    background: #e8e8e8;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -802,33 +886,48 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    background: var(--bg-main);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
   }
 
   .preview-play-btn {
-    background: none;
+    width: 25px;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
     border: none;
+    border-radius: 50%;
     cursor: pointer;
     padding: 0;
     flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+
+  .preview-play-btn:hover {
+    opacity: 0.85;
   }
 
   .preview-play-icon {
-    width: 28px;
-    height: 28px;
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) invert(1);
   }
 
   .preview-progress-track {
     flex: 1;
     height: 4px;
     background: var(--color-border);
-    border-radius: 2px;
+    border-radius: var(--radius-md);
     overflow: hidden;
   }
 
   .preview-progress-fill {
     height: 100%;
     background: var(--color-primary);
-    border-radius: 2px;
+    border-radius: var(--radius-md);
     transition: width 0.1s linear;
   }
 
@@ -837,6 +936,8 @@
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    min-width: 36px;
+    text-align: right;
   }
 
   /* Export progress */

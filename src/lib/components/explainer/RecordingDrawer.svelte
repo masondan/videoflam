@@ -10,15 +10,30 @@
 
   let scriptText = $state(script || '');
 
+  let scriptEl = $state<HTMLDivElement | null>(null);
+
+  $effect(() => {
+    if (scriptEl && script) {
+      scriptEl.textContent = script;
+    }
+  });
+
   function handleScriptInput(e: Event) {
     const target = e.currentTarget as HTMLDivElement;
     scriptText = target.textContent || '';
     onScriptChange?.(scriptText);
   }
 
+  function handleScriptFocus(e: FocusEvent) {
+    // No-op: CSS :focus handles placeholder hiding via :empty::before
+  }
+
   function handleScriptPaste(e: ClipboardEvent) {
     e.preventDefault();
     const text = e.clipboardData?.getData('text/plain') || '';
+    const target = e.currentTarget as HTMLDivElement;
+    // Clear any existing content (including placeholder span remnants) then insert
+    target.textContent = '';
     document.execCommand('insertText', false, text);
   }
 
@@ -199,20 +214,17 @@
           >+</button>
         </div>
         <div
+          bind:this={scriptEl}
           class="script-text"
           style="font-size: {textSize}px;"
           contenteditable="true"
           oninput={handleScriptInput}
           onpaste={handleScriptPaste}
+          onfocus={handleScriptFocus}
           role="textbox"
           aria-label="Script text editor"
-        >
-          {#if scriptText}
-            {scriptText}
-          {:else}
-            <span class="script-placeholder">Paste script here or use the script generator and tap 'Read & Record'</span>
-          {/if}
-        </div>
+          data-placeholder="Paste script here or use the script generator and tap 'Read & Record'"
+        ></div>
       </div>
 
       <!-- Permission error -->
@@ -402,13 +414,12 @@
   }
 
   .script-text {
-    line-height: var(--line-height-relaxed);
+    line-height: var(--line-height-normal);
     color: var(--text-primary);
     white-space: pre-wrap;
     overflow-y: auto;
     flex: 1;
     min-height: 200px;
-    padding-top: var(--spacing-xl);
     padding: var(--spacing-md);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
@@ -421,11 +432,14 @@
     background-color: #fafafa;
   }
 
-  .script-placeholder {
+  .script-text:empty::before {
+    content: attr(data-placeholder);
     font-size: var(--font-size-sm);
     color: var(--text-secondary);
     text-align: center;
     display: block;
+    white-space: normal;
+    pointer-events: none;
   }
 
   .error-banner {
