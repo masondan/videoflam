@@ -1,7 +1,7 @@
 {
   "name": "VideoFlam",
   "short_name": "VideoFlam",
-  "description": "Create a video explainer with voiceover, images and subtitles.",
+  "description": "Add subtitles and title overlays to videos with simple controls.",
   "start_url": "/",
   "scope": "/",
   "display": "browser",
@@ -32,6 +32,12 @@
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-videoflam-touch.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "monochrome"
     }
   ]
 }
