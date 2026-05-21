@@ -160,6 +160,55 @@
     return `${m}:${String(sec).padStart(2, '0')}`;
   }
 
+  // ── Progress bar scrubbing ─────────────────────────────────────────────────
+  let isDraggingProgress = $state(false);
+
+  function handleProgressClick(e: MouseEvent | TouchEvent) {
+    if (!audioEl) return;
+    const track = e.currentTarget as HTMLElement;
+    const rect = track.getBoundingClientRect();
+    const x = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
+    const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    audioEl.currentTime = percent * audioDuration;
+    currentTime = audioEl.currentTime;
+  }
+
+  function handleProgressThumbStart(e: MouseEvent | TouchEvent) {
+    e.preventDefault();
+    isDraggingProgress = true;
+    handleProgressMove(e);
+  }
+
+  function handleProgressMove(e: MouseEvent | TouchEvent) {
+    if (!isDraggingProgress || !audioEl) return;
+    const track = document.querySelector('.audio-player .progress-track') as HTMLElement;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const x = e instanceof MouseEvent ? e.clientX : (e as TouchEvent).touches[0].clientX;
+    const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    audioEl.currentTime = percent * audioDuration;
+    currentTime = audioEl.currentTime;
+  }
+
+  function handleProgressEnd() {
+    isDraggingProgress = false;
+  }
+
+  $effect(() => {
+    if (isDraggingProgress) {
+      document.addEventListener('mousemove', handleProgressMove);
+      document.addEventListener('touchmove', handleProgressMove);
+      document.addEventListener('mouseup', handleProgressEnd);
+      document.addEventListener('touchend', handleProgressEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleProgressMove);
+        document.removeEventListener('touchmove', handleProgressMove);
+        document.removeEventListener('mouseup', handleProgressEnd);
+        document.removeEventListener('touchend', handleProgressEnd);
+      };
+    }
+  });
+
   // ── Panel operations ─────────────────────────────────────────────────────────
   function handleSplit(payload: string) {
     // payload = "panelId:wordIndex"
@@ -316,10 +365,31 @@
               class="play-icon"
             />
           </button>
-          <div class="progress-track">
+          <div
+            class="progress-track"
+            role="slider"
+            tabindex="0"
+            aria-label="Seek audio"
+            aria-valuemin="0"
+            aria-valuemax={Math.round(audioDuration)}
+            aria-valuenow={Math.round(currentTime)}
+            onmousedown={handleProgressClick}
+            ontouchstart={handleProgressClick}
+          >
             <div
               class="progress-fill"
               style="width: {audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%"
+            ></div>
+            <div
+              class="progress-thumb"
+              style="left: {audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%"
+              onmousedown={handleProgressThumbStart}
+              ontouchstart={handleProgressThumbStart}
+              role="slider"
+              aria-label="Seek audio"
+              aria-valuemin="0"
+              aria-valuemax={Math.round(audioDuration)}
+              aria-valuenow={Math.round(currentTime)}
             ></div>
           </div>
           <span class="duration-label">{formatTime(currentTime)}</span>
@@ -572,7 +642,9 @@
     height: 4px;
     background: var(--color-border);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
+    cursor: pointer;
   }
 
   .progress-fill {
@@ -580,6 +652,24 @@
     background: var(--color-primary);
     border-radius: var(--radius-md);
     transition: width 0.1s linear;
+  }
+
+  .progress-thumb {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(84, 34, 176, 0.3);
+    flex-shrink: 0;
+    transition: width 0.1s linear;
+  }
+
+  .progress-thumb:active {
+    cursor: grabbing;
   }
 
   .duration-label {

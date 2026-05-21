@@ -170,8 +170,10 @@ async function exportExplainerWithWebCodecs(
   for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
     const currentTime = frameIndex / FPS;
 
-    // Find which panel is active at currentTime
+    // Find which panel is active at currentTime, with frame-holding during silence gaps
     let activePanelIndex = -1;
+
+    // 1. Check if time falls within a panel's active audio window
     for (let i = 0; i < panels.length; i++) {
       if (currentTime >= panels[i].startTime && currentTime < panels[i].endTime) {
         activePanelIndex = i;
@@ -179,9 +181,26 @@ async function exportExplainerWithWebCodecs(
       }
     }
 
-    // Hold-last-frame: after last panel ends, use last available bitmap
-    if (activePanelIndex === -1 && currentTime >= (panels[panels.length - 1]?.endTime ?? 0)) {
-      activePanelIndex = lastBitmapIndex;
+    // 2. If not in any panel, check if we're in a silence gap between panels
+    if (activePanelIndex === -1) {
+      for (let i = 0; i < panels.length - 1; i++) {
+        if (currentTime >= panels[i].endTime && currentTime < panels[i + 1].startTime) {
+          // In silence gap: hold the previous panel
+          activePanelIndex = i;
+          break;
+        }
+      }
+    }
+
+    // 3. If still not found, check if we're before first audio or after last audio
+    if (activePanelIndex === -1) {
+      if (currentTime < (panels[0]?.startTime ?? Infinity)) {
+        // Before first audio: use first bitmap available
+        activePanelIndex = lastBitmapIndex;
+      } else {
+        // After last audio: use last available bitmap
+        activePanelIndex = lastBitmapIndex;
+      }
     }
 
     exportCtx.clearRect(0, 0, videoWidth, videoHeight);
@@ -356,14 +375,35 @@ async function exportExplainerWithMediaRecorder(
 
       const currentTime = elapsed;
       let activePanelIndex = -1;
+
+      // 1. Check if time falls within a panel's active audio window
       for (let i = 0; i < panels.length; i++) {
         if (currentTime >= panels[i].startTime && currentTime < panels[i].endTime) {
           activePanelIndex = i;
           break;
         }
       }
-      if (activePanelIndex === -1 && currentTime >= (panels[panels.length - 1]?.endTime ?? 0)) {
-        activePanelIndex = lastBitmapIndex;
+
+      // 2. If not in any panel, check if we're in a silence gap between panels
+      if (activePanelIndex === -1) {
+        for (let i = 0; i < panels.length - 1; i++) {
+          if (currentTime >= panels[i].endTime && currentTime < panels[i + 1].startTime) {
+            // In silence gap: hold the previous panel
+            activePanelIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 3. If still not found, check if we're before first audio or after last audio
+      if (activePanelIndex === -1) {
+        if (currentTime < (panels[0]?.startTime ?? Infinity)) {
+          // Before first audio: use first bitmap available
+          activePanelIndex = lastBitmapIndex;
+        } else {
+          // After last audio: use last available bitmap
+          activePanelIndex = lastBitmapIndex;
+        }
       }
 
       // Check transition window

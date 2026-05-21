@@ -3,6 +3,7 @@
   import ScriptDrawer from './explainer/ScriptDrawer.svelte';
   import RecordingDrawer from './explainer/RecordingDrawer.svelte';
   import ArchivePage from './explainer/ArchivePage.svelte';
+  import { tick } from 'svelte';
   import {
     createDefaultProject,
     CANVAS_DIMENSIONS,
@@ -123,6 +124,10 @@
 
     // Pre-load all panel bitmaps so the RAF loop can draw synchronously
     await loadPreviewBitmaps();
+    
+    // Render first frame after bitmaps are loaded and DOM is ready
+    await tick();
+    renderStaticFrame(0);
   }
 
   async function loadPreviewBitmaps() {
@@ -202,8 +207,10 @@
           project.transitionSpeed
         );
       } else {
-        // Find active panel at current time
+        // Find active panel at current time, with frame-holding during silence gaps
         let activePanelIndex = -1;
+
+        // 1. Check if time falls within a panel's active audio window
         for (let i = 0; i < project.panels.length; i++) {
           if (previewTime >= project.panels[i].startTime && previewTime < project.panels[i].endTime) {
             activePanelIndex = i;
@@ -211,10 +218,29 @@
           }
         }
 
-        // Hold-last-frame: after last panel ends, use last panel that has an image
-        if (activePanelIndex === -1 && previewTime >= (project.panels[project.panels.length - 1]?.endTime ?? 0)) {
-          for (let i = project.panels.length - 1; i >= 0; i--) {
-            if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+        // 2. If not in any panel, check if we're in a silence gap between panels
+        if (activePanelIndex === -1) {
+          for (let i = 0; i < project.panels.length - 1; i++) {
+            if (previewTime >= project.panels[i].endTime && previewTime < project.panels[i + 1].startTime) {
+              // In silence gap: hold the previous panel
+              activePanelIndex = i;
+              break;
+            }
+          }
+        }
+
+        // 3. If still not found, check if we're before first audio or after last audio
+        if (activePanelIndex === -1) {
+          if (previewTime < (project.panels[0]?.startTime ?? Infinity)) {
+            // Before first audio: use first panel with image
+            for (let i = 0; i < project.panels.length; i++) {
+              if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+            }
+          } else {
+            // After last audio: use last panel with image
+            for (let i = project.panels.length - 1; i >= 0; i--) {
+              if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+            }
           }
         }
 
@@ -248,6 +274,97 @@
     }
   }
 
+  function renderStaticFrame(time: number) {
+    if (!previewEl) return;
+    const ctx = previewEl.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    drawCheckerboard(ctx, canvasWidth, canvasHeight);
+
+    // Check if we're in a transition window
+    const ts = getTransitionState(project.panels, time, project.transition, project.transitionSpeed);
+
+    if (ts.inTransition) {
+      // Render transition between two panels
+      const outgoingPanel = project.panels[ts.outgoingIndex];
+      const incomingPanel = project.panels[ts.incomingIndex];
+      const outgoingBmp = outgoingPanel ? previewBitmaps.get(outgoingPanel.id) ?? null : null;
+      const incomingBmp = incomingPanel ? previewBitmaps.get(incomingPanel.id) ?? null : null;
+
+      drawTransitionFrame(
+        ctx,
+        outgoingBmp,
+        incomingBmp,
+        canvasWidth,
+        canvasHeight,
+        project.transition,
+        ts.progress,
+        project.transitionSpeed
+      );
+    } else {
+      // Find active panel at given time, with frame-holding during silence gaps
+      let activePanelIndex = -1;
+
+      // 1. Check if time falls within a panel's active audio window
+      for (let i = 0; i < project.panels.length; i++) {
+        if (time >= project.panels[i].startTime && time < project.panels[i].endTime) {
+          activePanelIndex = i;
+          break;
+        }
+      }
+
+      // 2. If not in any panel, check if we're in a silence gap between panels
+      if (activePanelIndex === -1) {
+        for (let i = 0; i < project.panels.length - 1; i++) {
+          if (time >= project.panels[i].endTime && time < project.panels[i + 1].startTime) {
+            // In silence gap: hold the previous panel
+            activePanelIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 3. If still not found, check if we're before first audio or after last audio
+      if (activePanelIndex === -1) {
+        if (time < (project.panels[0]?.startTime ?? Infinity)) {
+          // Before first audio: use first panel with image
+          for (let i = 0; i < project.panels.length; i++) {
+            if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+          }
+        } else {
+          // After last audio: use last panel with image
+          for (let i = project.panels.length - 1; i >= 0; i--) {
+            if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+          }
+        }
+      }
+
+      // Render Ken Burns effect on active panel
+      if (activePanelIndex >= 0 && project.panels[activePanelIndex]) {
+        const panel = project.panels[activePanelIndex];
+        const bmp = previewBitmaps.get(panel.id);
+        if (bmp) {
+          const panelDuration = panel.endTime - panel.startTime;
+          const panelProgress = panelDuration > 0
+            ? Math.min((time - panel.startTime) / panelDuration, 1)
+            : 0;
+
+          drawKenBurnsFrame(
+            ctx,
+            bmp,
+            canvasWidth,
+            canvasHeight,
+            project.kenBurns,
+            project.kenBurnsSpeed,
+            panelProgress,
+            panelDuration
+          );
+        }
+      }
+    }
+  }
+
   function handlePreviewEnded() {
     isPreviewPlaying = false;
     if (previewRafId !== null) { cancelAnimationFrame(previewRafId); previewRafId = null; }
@@ -258,6 +375,57 @@
     const sec = Math.floor(s % 60);
     return `${m}:${String(sec).padStart(2, '0')}`;
   }
+
+  // ── Preview progress bar scrubbing ─────────────────────────────────────────
+  let isDraggingPreview = $state(false);
+
+  function handlePreviewProgressClick(e: MouseEvent | TouchEvent) {
+    if (!previewAudioEl || !previewEl) return;
+    const track = e.currentTarget as HTMLElement;
+    const rect = track.getBoundingClientRect();
+    const x = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
+    const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    previewAudioEl.currentTime = percent * previewDuration;
+    previewTime = previewAudioEl.currentTime;
+    renderStaticFrame(previewTime);
+  }
+
+  function handlePreviewThumbStart(e: MouseEvent | TouchEvent) {
+    e.preventDefault();
+    isDraggingPreview = true;
+    handlePreviewProgressMove(e);
+  }
+
+  function handlePreviewProgressMove(e: MouseEvent | TouchEvent) {
+    if (!isDraggingPreview || !previewAudioEl) return;
+    const track = document.querySelector('.preview-progress-track') as HTMLElement;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const x = e instanceof MouseEvent ? e.clientX : (e as TouchEvent).touches[0].clientX;
+    const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    previewAudioEl.currentTime = percent * previewDuration;
+    previewTime = previewAudioEl.currentTime;
+    renderStaticFrame(previewTime);
+  }
+
+  function handlePreviewProgressEnd() {
+    isDraggingPreview = false;
+  }
+
+  $effect(() => {
+    if (isDraggingPreview) {
+      document.addEventListener('mousemove', handlePreviewProgressMove);
+      document.addEventListener('touchmove', handlePreviewProgressMove);
+      document.addEventListener('mouseup', handlePreviewProgressEnd);
+      document.addEventListener('touchend', handlePreviewProgressEnd);
+      return () => {
+        document.removeEventListener('mousemove', handlePreviewProgressMove);
+        document.removeEventListener('touchmove', handlePreviewProgressMove);
+        document.removeEventListener('mouseup', handlePreviewProgressEnd);
+        document.removeEventListener('touchend', handlePreviewProgressEnd);
+      };
+    }
+  });
 
   // ── Export ───────────────────────────────────────────────────────────────────
   function handleDownloadTap() {
@@ -331,6 +499,10 @@
     }
 
     await loadPreviewBitmaps();
+    
+    // Render first frame after bitmaps are loaded and DOM is ready
+    await tick();
+    renderStaticFrame(0);
   }
 
   // ── New project ───────────────────────────────────────────────────────────────
@@ -441,10 +613,31 @@
             class="preview-play-icon"
           />
         </button>
-        <div class="preview-progress-track">
+        <div
+          class="preview-progress-track"
+          role="slider"
+          tabindex="0"
+          aria-label="Seek preview"
+          aria-valuemin="0"
+          aria-valuemax={Math.round(previewDuration)}
+          aria-valuenow={Math.round(previewTime)}
+          onmousedown={handlePreviewProgressClick}
+          ontouchstart={handlePreviewProgressClick}
+        >
           <div
             class="preview-progress-fill"
             style="width: {previewDuration > 0 ? (previewTime / previewDuration) * 100 : 0}%"
+          ></div>
+          <div
+            class="preview-progress-thumb"
+            style="left: {previewDuration > 0 ? (previewTime / previewDuration) * 100 : 0}%"
+            onmousedown={handlePreviewThumbStart}
+            ontouchstart={handlePreviewThumbStart}
+            role="slider"
+            aria-label="Seek preview"
+            aria-valuemin="0"
+            aria-valuemax={Math.round(previewDuration)}
+            aria-valuenow={Math.round(previewTime)}
           ></div>
         </div>
         <span class="preview-time">{formatTime(previewTime)}</span>
@@ -1208,7 +1401,9 @@
     height: 4px;
     background: var(--color-border);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
+    cursor: pointer;
   }
 
   .preview-progress-fill {
@@ -1216,6 +1411,24 @@
     background: var(--color-primary);
     border-radius: var(--radius-md);
     transition: width 0.1s linear;
+  }
+
+  .preview-progress-thumb {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(84, 34, 176, 0.3);
+    flex-shrink: 0;
+    transition: width 0.1s linear;
+  }
+
+  .preview-progress-thumb:active {
+    cursor: grabbing;
   }
 
   .preview-time {
