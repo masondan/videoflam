@@ -178,9 +178,9 @@ function renderZoomIn(
   const scaleB     = 0.55 + easeOutCubic(progress) * 0.45;
   const alphaA     = 1 - easeInCubic(progress);
   const alphaB     = Math.min(1, easeOutCubic(progress) * 1.4);
-  const blurSpread = Math.sin(Math.PI * progress) * 0.10 * blurScale;
-  const passes     = 8;
-  const ghostAlpha = 0.12;
+  const blurSpread = Math.sin(Math.PI * progress) * 0.20 * blurScale;
+  const passes     = 6;
+  const ghostAlpha = 0.20;
 
   function drawCentred(clip: ImageBitmap, scale: number, alpha: number) {
     ctx.save();
@@ -336,7 +336,10 @@ export function getTransitionState(
   const halfDur = transitionDuration(transitionSpeed) / 2;
 
   for (let i = 0; i < panels.length - 1; i++) {
-    const boundary = panels[i].endTime;
+    // Anchor transition to where panel display ends (next panel's audio start)
+    // This respects frame-holding: panel i displays from its audio start
+    // through the silence gap until panel i+1's audio begins.
+    const boundary = panels[i + 1].startTime;
     const windowStart = boundary - halfDur;
     const windowEnd = boundary + halfDur;
 
