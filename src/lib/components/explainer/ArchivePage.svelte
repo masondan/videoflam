@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import {
     listProjects,
     deleteProject,
     loadProject,
+    loadThumbnailUrl,
     formatProjectDate,
     formatDuration,
     type ProjectMeta,
@@ -22,6 +24,31 @@
   let deletingId = $state<string | null>(null);
   let confirmDeleteId = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
+  // Map of projectId → object URL (or null if no image)
+  let thumbnails = $state<Record<string, string | null>>({});
+
+  // ── Thumbnail loading ─────────────────────────────────────────────────────
+  onMount(() => {
+    loadThumbnails();
+    return () => {
+      // Revoke all object URLs on unmount
+      for (const url of Object.values(thumbnails)) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    };
+  });
+
+  async function loadThumbnails() {
+    for (const meta of projects) {
+      const firstWithImage = meta.panels.find(p => p.hasImage);
+      if (firstWithImage) {
+        const url = await loadThumbnailUrl(meta.id, firstWithImage.id);
+        thumbnails = { ...thumbnails, [meta.id]: url };
+      } else {
+        thumbnails = { ...thumbnails, [meta.id]: null };
+      }
+    }
+  }
 
   // ── Actions ───────────────────────────────────────────────────────────────
   async function handleLoad(id: string) {
@@ -83,9 +110,7 @@
 
     <!-- Header -->
     <div class="archive-header">
-      <button type="button" class="close-btn" onclick={onClose} aria-label="Close archive">
-        <img src="/icons/icon-collapse.svg" alt="" class="close-icon" />
-      </button>
+      <button type="button" class="close-btn" onclick={onClose} aria-label="Close archive">✕</button>
       <h2 class="archive-title">Saved Projects</h2>
       <div class="header-spacer"></div>
     </div>
@@ -120,21 +145,12 @@
               {#if loadingId === meta.id}
                 <span class="spinner" aria-hidden="true"></span>
               {:else}
-                <!-- Thumbnail strip: show up to 3 aspect-ratio boxes -->
-                <div class="thumb-strip">
-                  {#each meta.panels.slice(0, 3) as panel}
-                    <div
-                      class="thumb-box"
-                      class:thumb-box--has-image={panel.hasImage}
-                      aria-hidden="true"
-                    >
-                      {#if !panel.hasImage}
-                        <span class="thumb-empty">?</span>
-                      {/if}
-                    </div>
-                  {/each}
-                  {#if meta.panels.length > 3}
-                    <div class="thumb-more">+{meta.panels.length - 3}</div>
+                <!-- Single thumbnail of first image -->
+                <div class="thumb" aria-hidden="true">
+                  {#if thumbnails[meta.id]}
+                    <img src={thumbnails[meta.id]} alt="" class="thumb-img" />
+                  {:else}
+                    <img src="/icons/icon-image.svg" alt="" class="thumb-placeholder" />
                   {/if}
                 </div>
               {/if}
@@ -208,9 +224,10 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    max-width: 600px;
+    max-width: 480px;
     margin: 0 auto;
     width: 100%;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.08);
   }
 
   /* Header */
@@ -237,11 +254,6 @@
 
   .close-btn:hover {
     background: var(--bg-main);
-  }
-
-  .close-icon {
-    width: 20px;
-    height: 20px;
   }
 
   .archive-title {
@@ -353,40 +365,31 @@
     cursor: not-allowed;
   }
 
-  /* Thumbnail strip */
-  .thumb-strip {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-    align-items: center;
-  }
-
-  .thumb-box {
-    width: 28px;
-    height: 40px;
-    border-radius: 3px;
+  /* Single thumbnail */
+  .thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-sm);
     background: var(--bg-main);
     border: 1px solid var(--color-border);
+    flex-shrink: 0;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
   }
 
-  .thumb-box--has-image {
-    background: var(--color-highlight);
-    border-color: var(--color-primary);
+  .thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
-  .thumb-empty {
-    font-size: 10px;
-    color: var(--text-secondary);
-  }
-
-  .thumb-more {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    white-space: nowrap;
+  .thumb-placeholder {
+    width: 24px;
+    height: 24px;
+    opacity: 0.3;
   }
 
   /* Project info */
@@ -483,12 +486,26 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: transparent;
     z-index: 300;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: var(--spacing-md);
+  }
+
+  .modal-overlay::before {
+    content: '';
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    max-width: 480px;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: -1;
+    pointer-events: none;
   }
 
   .modal {
@@ -500,6 +517,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+    position: relative;
+    z-index: 1;
   }
 
   .modal-text {

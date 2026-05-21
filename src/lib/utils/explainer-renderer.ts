@@ -29,9 +29,9 @@ export const KEN_BURNS_ZOOM_RATES: Record<KenBurnsSpeed, number> = {
 // ─── Transition duration constants ────────────────────────────────────────────
 
 export const TRANSITION_DURATION: Record<TransitionSpeed, number> = {
-  slower: 0.55,
-  normal: 0.38,
-  faster: 0.22,
+  slower: 0.31,
+  normal: 0.25,
+  faster: 0.19,
 };
 
 const BLUR_SCALE: Record<TransitionSpeed, number> = {

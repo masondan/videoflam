@@ -17,6 +17,8 @@
   import { downloadBlob } from '$lib/utils/video-export';
   import type { ExportProgress } from '$lib/utils/video-export';
   import { saveProject } from '$lib/utils/projectStorage';
+  import { interimVideoStore } from '$lib/stores/interimVideo';
+  import { activeTabStore } from '$lib/stores/activeTab';
   import {
     drawKenBurnsFrame,
     drawTransitionFrame,
@@ -516,6 +518,37 @@
     project = createDefaultProject();
     handleScriptClear();
   }
+
+  // ── Add Subtitles ─────────────────────────────────────────────────────────────
+  let isPreparingSubtitles = $state(false);
+
+  async function handleAddSubtitles() {
+    if (!hasAudio) return;
+    isPreparingSubtitles = true;
+    exportError = null;
+
+    try {
+      const result = await smartExportExplainer({
+        panels: project.panels,
+        audioBlob: project.audio!.blob,
+        aspectRatio: project.aspectRatio,
+        kenBurns: project.kenBurns,
+        kenBurnsSpeed: project.kenBurnsSpeed,
+        transition: project.transition,
+        transitionSpeed: project.transitionSpeed,
+        onProgress: (p) => { exportProgress = p; },
+      });
+
+      interimVideoStore.set({ blob: result.blob, mimeType: result.mimeType });
+      activeTabStore.set('subtitle');
+    } catch (err) {
+      exportError = err instanceof Error ? err.message : 'Failed to prepare video for subtitles';
+      console.error('[ExplainerPage] Add subtitles error:', err);
+    } finally {
+      isPreparingSubtitles = false;
+      exportProgress = null;
+    }
+  }
 </script>
 
 <div class="explainer-page">
@@ -814,7 +847,7 @@
       type="button"
       class="download-btn"
       onclick={handleDownloadTap}
-      disabled={!hasAudio || isExporting}
+      disabled={!hasAudio || isExporting || isPreparingSubtitles}
     >
       {#if isExporting}
         <span class="spinner" aria-hidden="true"></span>
@@ -826,10 +859,23 @@
     </button>
   </div>
 
-  <!-- New project -->
-  <div class="new-project-row">
-    <button type="button" class="new-project-btn" onclick={handleNewProject}>
+  <!-- New project + Add subtitles -->
+  <div class="secondary-actions-row">
+    <button type="button" class="secondary-btn" onclick={handleNewProject}>
       New project
+    </button>
+    <button
+      type="button"
+      class="secondary-btn"
+      onclick={handleAddSubtitles}
+      disabled={!hasAudio || isExporting || isPreparingSubtitles}
+    >
+      {#if isPreparingSubtitles}
+        <span class="spinner spinner--brand" aria-hidden="true"></span>
+        Preparing…
+      {:else}
+        Add subtitles
+      {/if}
     </button>
   </div>
 
@@ -1527,20 +1573,40 @@
     to { transform: rotate(360deg); }
   }
 
-  .new-project-row {
+  .secondary-actions-row {
     display: flex;
-    justify-content: center;
+    gap: var(--spacing-sm);
   }
 
-  .new-project-btn {
-    background: none;
-    border: none;
+  .secondary-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    color: var(--color-primary);
+    border: 1.5px solid var(--color-primary);
+    border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .secondary-btn:hover:not(:disabled) {
+    background: var(--color-highlight);
+  }
+
+  .secondary-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .spinner--brand {
+    border-color: rgba(84, 34, 176, 0.3);
+    border-top-color: var(--color-primary);
   }
 
   /* Modal */

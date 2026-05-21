@@ -25,16 +25,16 @@ Three speeds map to transition duration. Apply to all four transitions identical
 
 | Setting | Duration | Character |
 |---------|----------|-----------|
-| `slower` | `0.55s` | Still fast, perceptibly smooth — blur reads clearly |
-| `normal` | `0.38s` | Default — punchy but not jarring |
-| `faster` | `0.22s` | Split-second, finger-snap cut |
+| `slower` | `0.31s` | Perceptibly smooth — blur reads clearly |
+| `normal` | `0.25s` | Default — punchy but not jarring |
+| `faster` | `0.19s` | Split-second, finger-snap cut |
 
 ```typescript
 // In VideoSubtitlePage.svelte — transition duration lookup
 const TRANSITION_DURATION: Record<'slower' | 'normal' | 'faster', number> = {
-  slower: 0.55,
-  normal: 0.38,
-  faster: 0.22,
+  slower: 0.31,
+  normal: 0.25,
+  faster: 0.19,
 };
 
 // Retrieve from user's speed setting (matches existing slider pattern)
@@ -349,9 +349,9 @@ type TransitionType = 'push-left' | 'push-up' | 'zoom-in' | 'zoom-out' | 'none';
 type TransitionSpeed = 'slower' | 'normal' | 'faster';
 
 const TRANSITION_DURATION: Record<TransitionSpeed, number> = {
-  slower: 0.55,
-  normal: 0.38,
-  faster: 0.22,
+  slower: 0.31,
+  normal: 0.25,
+  faster: 0.19,
 };
 
 const BLUR_SCALE: Record<TransitionSpeed, number> = {

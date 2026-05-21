@@ -1,9 +1,18 @@
 <script lang="ts">
   import VideoSubtitlePage from '$lib/components/VideoSubtitlePage.svelte';
   import ExplainerPage from '$lib/components/ExplainerPage.svelte';
+  import { activeTabStore } from '$lib/stores/activeTab';
 
   type Tab = 'subtitle' | 'explainer';
   let activeTab = $state<Tab>('subtitle');
+
+  // Keep local state in sync with the store (ExplainerPage writes to it)
+  activeTabStore.subscribe((tab) => {
+    if (tab) {
+      activeTab = tab;
+      activeTabStore.set(null); // clear after consuming
+    }
+  });
 </script>
 
 <div class="app-container">

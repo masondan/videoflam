@@ -259,6 +259,26 @@ export function listProjects(): ProjectMeta[] {
 }
 
 /**
+ * Load a single image blob from IDB for thumbnail display.
+ * Returns an object URL string, or null if not found.
+ * Caller is responsible for revoking the URL when done.
+ */
+export async function loadThumbnailUrl(
+  projectId: string,
+  panelId: string
+): Promise<string | null> {
+  try {
+    const db = await openIDB();
+    const blob = await idbGet(db, imageKey(projectId, panelId));
+    db.close();
+    if (!blob) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Delete a project and all its blobs from IDB.
  */
 export async function deleteProject(projectId: string): Promise<void> {
