@@ -28,7 +28,9 @@
   let panels = $state<VideoPanel[]>(untrack(() => [...project.panels]));
   let audioBlob = $state<Blob | null>(untrack(() => project.audio?.blob ?? null));
   let audioDuration = $state<number>(untrack(() => project.audio?.duration ?? 0));
-  let audioUrl = $state<string | null>(null);
+  let audioUrl = $state<string | null>(
+    untrack(() => project.audio?.blob ? URL.createObjectURL(project.audio.blob) : null)
+  );
   let audioEl = $state<HTMLAudioElement | null>(null);
 
   let isTranscribing = $state(false);

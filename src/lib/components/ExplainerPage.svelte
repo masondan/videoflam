@@ -16,6 +16,11 @@
   import { downloadBlob } from '$lib/utils/video-export';
   import type { ExportProgress } from '$lib/utils/video-export';
   import { saveProject } from '$lib/utils/projectStorage';
+  import {
+    drawKenBurnsFrame,
+    drawTransitionFrame,
+    getTransitionState,
+  } from '$lib/utils/explainer-renderer';
 
   // ── Project state ────────────────────────────────────────────────────────────
   let project = $state<VideoProject>(createDefaultProject());
@@ -29,6 +34,7 @@
   let exportProgress = $state<ExportProgress | null>(null);
   let exportError = $state<string | null>(null);
   let showIncompleteModal = $state(false);
+  let openEffectsPanel = $state<'pan-zoom' | 'transitions' | null>(null);
 
   // Preview playback
   let previewEl = $state<HTMLCanvasElement | null>(null);
@@ -175,23 +181,62 @@
       // Draw checkerboard for letterbox areas
       drawCheckerboard(ctx, canvasWidth, canvasHeight);
 
-      // Find active panel at current time
-      let activePanel = project.panels.find(
-        p => previewTime >= p.startTime && previewTime < p.endTime
-      ) ?? null;
+      // Check if we're in a transition window
+      const ts = getTransitionState(project.panels, previewTime, project.transition, project.transitionSpeed);
 
-      // Hold-last-frame: after last panel ends, use last panel that has an image
-      if (!activePanel && previewTime >= (project.panels[project.panels.length - 1]?.endTime ?? 0)) {
-        for (let i = project.panels.length - 1; i >= 0; i--) {
-          if (project.panels[i].imageBlob) { activePanel = project.panels[i]; break; }
+      if (ts.inTransition) {
+        // Render transition between two panels
+        const outgoingPanel = project.panels[ts.outgoingIndex];
+        const incomingPanel = project.panels[ts.incomingIndex];
+        const outgoingBmp = outgoingPanel ? previewBitmaps.get(outgoingPanel.id) ?? null : null;
+        const incomingBmp = incomingPanel ? previewBitmaps.get(incomingPanel.id) ?? null : null;
+
+        drawTransitionFrame(
+          ctx,
+          outgoingBmp,
+          incomingBmp,
+          canvasWidth,
+          canvasHeight,
+          project.transition,
+          ts.progress
+        );
+      } else {
+        // Find active panel at current time
+        let activePanelIndex = -1;
+        for (let i = 0; i < project.panels.length; i++) {
+          if (previewTime >= project.panels[i].startTime && previewTime < project.panels[i].endTime) {
+            activePanelIndex = i;
+            break;
+          }
         }
-      }
 
-      // Draw synchronously from pre-loaded bitmap map
-      if (activePanel) {
-        const bmp = previewBitmaps.get(activePanel.id);
-        if (bmp) {
-          ctx.drawImage(bmp, 0, 0, canvasWidth, canvasHeight);
+        // Hold-last-frame: after last panel ends, use last panel that has an image
+        if (activePanelIndex === -1 && previewTime >= (project.panels[project.panels.length - 1]?.endTime ?? 0)) {
+          for (let i = project.panels.length - 1; i >= 0; i--) {
+            if (project.panels[i].imageBlob) { activePanelIndex = i; break; }
+          }
+        }
+
+        // Render Ken Burns effect on active panel
+        if (activePanelIndex >= 0 && project.panels[activePanelIndex]) {
+          const panel = project.panels[activePanelIndex];
+          const bmp = previewBitmaps.get(panel.id);
+          if (bmp) {
+            const panelDuration = panel.endTime - panel.startTime;
+            const panelProgress = panelDuration > 0
+              ? Math.min((previewTime - panel.startTime) / panelDuration, 1)
+              : 1;
+
+            drawKenBurnsFrame(
+              ctx,
+              bmp,
+              canvasWidth,
+              canvasHeight,
+              project.kenBurns,
+              project.kenBurnsSpeed,
+              panelProgress
+            );
+          }
         }
       }
     }
@@ -410,77 +455,109 @@
     {/if}
   </div>
 
-  <!-- Pan & Zoom (Ken Burns) -->
-  <div class="setting-block">
-    <span class="setting-block-label">Pan &amp; Zoom</span>
-    <div class="kb-options">
-      {#each (['none', 'zoom-in', 'zoom-out'] as KenBurnsPreset[]) as preset}
-        <button
-          type="button"
-          class="kb-option-btn"
-          onclick={() => setKenBurns(preset)}
-          aria-pressed={project.kenBurns === preset}
-        >
-          <KenBurnsPreview {preset} active={project.kenBurns === preset} />
-        </button>
-      {/each}
-    </div>
-    {#if project.kenBurns !== 'none'}
-      <div class="speed-row">
-        <label class="speed-label" for="kb-speed-slider">
-          Speed
-          <span class="speed-value">{project.kenBurnsSpeed === 0.5 ? 'Slow' : project.kenBurnsSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
-        </label>
-        <input
-          id="kb-speed-slider"
-          type="range"
-          class="speed-slider"
-          min="0.5"
-          max="2.0"
-          step="0.25"
-          value={project.kenBurnsSpeed}
-          oninput={(e) => { project = { ...project, kenBurnsSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
-        />
+  <!-- Pan & Zoom (Ken Burns) Dropdown -->
+  <div class="effects-dropdown" class:open={openEffectsPanel === 'pan-zoom'}>
+    <button
+      type="button"
+      class="dropdown-header"
+      onclick={() => openEffectsPanel = openEffectsPanel === 'pan-zoom' ? null : 'pan-zoom'}
+    >
+      <span class="dropdown-label">Pan &amp; Zoom</span>
+      <img
+        src="/icons/icon-expand.svg"
+        alt=""
+        class="dropdown-chevron"
+        class:rotated={openEffectsPanel === 'pan-zoom'}
+      />
+    </button>
+    {#if openEffectsPanel === 'pan-zoom'}
+      <div class="dropdown-content">
+        <div class="kb-options">
+          {#each (['none', 'zoom-in', 'zoom-out'] as KenBurnsPreset[]) as preset}
+            <button
+              type="button"
+              class="kb-option-btn"
+              onclick={() => setKenBurns(preset)}
+              aria-pressed={project.kenBurns === preset}
+            >
+              <KenBurnsPreview {preset} active={project.kenBurns === preset} />
+            </button>
+          {/each}
+        </div>
+        {#if project.kenBurns !== 'none'}
+          <div class="speed-row">
+            <label class="speed-label" for="kb-speed-slider">
+              Speed
+              <span class="speed-value">{project.kenBurnsSpeed === 0.5 ? 'Slow' : project.kenBurnsSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
+            </label>
+            <input
+              id="kb-speed-slider"
+              type="range"
+              class="speed-slider"
+              min="0.5"
+              max="2.0"
+              step="0.25"
+              value={project.kenBurnsSpeed}
+              oninput={(e) => { project = { ...project, kenBurnsSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
+            />
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
 
-  <!-- Transitions -->
-  <div class="setting-block">
-    <span class="setting-block-label">Transitions</span>
-    <div class="transition-options">
-      {#each ([
-        { value: 'none', label: 'None' },
-        { value: 'zoom-in', label: 'Zoom In' },
-        { value: 'zoom-out', label: 'Zoom Out' },
-      ] as { value: TransitionPreset; label: string }[]) as opt}
-        <button
-          type="button"
-          class="transition-option-btn"
-          class:transition-option-btn--active={project.transition === opt.value}
-          onclick={() => { project = { ...project, transition: opt.value }; }}
-          aria-pressed={project.transition === opt.value}
-        >
-          {opt.label}
-        </button>
-      {/each}
-    </div>
-    {#if project.transition !== 'none'}
-      <div class="speed-row">
-        <label class="speed-label" for="transition-speed-slider">
-          Speed
-          <span class="speed-value">{project.transitionSpeed === 0.5 ? 'Slow' : project.transitionSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
-        </label>
-        <input
-          id="transition-speed-slider"
-          type="range"
-          class="speed-slider"
-          min="0.5"
-          max="2.0"
-          step="0.25"
-          value={project.transitionSpeed}
-          oninput={(e) => { project = { ...project, transitionSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
-        />
+  <!-- Transitions Dropdown -->
+  <div class="effects-dropdown" class:open={openEffectsPanel === 'transitions'}>
+    <button
+      type="button"
+      class="dropdown-header"
+      onclick={() => openEffectsPanel = openEffectsPanel === 'transitions' ? null : 'transitions'}
+    >
+      <span class="dropdown-label">Transitions</span>
+      <img
+        src="/icons/icon-expand.svg"
+        alt=""
+        class="dropdown-chevron"
+        class:rotated={openEffectsPanel === 'transitions'}
+      />
+    </button>
+    {#if openEffectsPanel === 'transitions'}
+      <div class="dropdown-content">
+        <div class="transition-options">
+          {#each ([
+            { value: 'none', label: 'None' },
+            { value: 'zoom-in', label: 'Zoom In' },
+            { value: 'zoom-out', label: 'Zoom Out' },
+          ] as { value: TransitionPreset; label: string }[]) as opt}
+            <button
+              type="button"
+              class="transition-option-btn"
+              class:transition-option-btn--active={project.transition === opt.value}
+              onclick={() => { project = { ...project, transition: opt.value }; }}
+              aria-pressed={project.transition === opt.value}
+            >
+              {opt.label}
+            </button>
+          {/each}
+        </div>
+        {#if project.transition !== 'none'}
+          <div class="speed-row">
+            <label class="speed-label" for="transition-speed-slider">
+              Speed
+              <span class="speed-value">{project.transitionSpeed === 0.5 ? 'Slow' : project.transitionSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
+            </label>
+            <input
+              id="transition-speed-slider"
+              type="range"
+              class="speed-slider"
+              min="0.5"
+              max="2.0"
+              step="0.25"
+              value={project.transitionSpeed}
+              oninput={(e) => { project = { ...project, transitionSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
+            />
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -772,26 +849,77 @@
     filter: brightness(0) invert(1);
   }
 
-  /* Settings blocks */
-  .setting-block {
+  /* Effects dropdown panels */
+  .effects-dropdown {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
-    background: var(--bg-main);
+    gap: 0;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: var(--spacing-md);
+    overflow: hidden;
   }
 
-  .setting-block-label {
+  .dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md);
+    background: var(--bg-white);
+    border: none;
+    cursor: pointer;
+    gap: var(--spacing-sm);
+    transition: all var(--transition-fast);
+  }
+
+  .dropdown-header:hover {
+    background: var(--color-highlight);
+  }
+
+  .dropdown-label {
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
+    flex: 1;
+    text-align: left;
+  }
+
+  .dropdown-chevron {
+    width: 20px;
+    height: 20px;
+    filter: invert(0.43);
+    transition: transform var(--transition-fast);
+  }
+
+  .dropdown-chevron.rotated {
+    transform: rotate(180deg);
+  }
+
+  .dropdown-content {
+    padding: var(--spacing-md);
+    background: var(--bg-white);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    animation: slideDown var(--transition-fast);
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   /* Ken Burns options */
   .kb-options {
     display: flex;
     gap: var(--spacing-sm);
+    justify-content: space-around;
   }
 
   .kb-option-btn {
@@ -808,6 +936,7 @@
   .transition-options {
     display: flex;
     gap: var(--spacing-sm);
+    justify-content: space-around;
   }
 
   .transition-option-btn {
