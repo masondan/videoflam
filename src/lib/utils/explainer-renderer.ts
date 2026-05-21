@@ -3,21 +3,86 @@
  * Used by both preview (ExplainerPage.svelte) and export (explainer-export.ts)
  *
  * Pure functions for Ken Burns and transition rendering.
+ *
+ * Ken Burns Fix:
+ * - Animation runs for the full panel duration (not capped at 5 seconds)
+ * - Zoom rate is consistent across different clip lengths (1%, 2%, or 3% per second)
+ * - Short clips get less total zoom, long clips get more (capped at 10 seconds)
+ * - This ensures the visual effect feels the same speed regardless of clip duration
+ *
+ * Transitions (May 2026):
+ * - Four dramatic transitions: zoom-in, zoom-out, push-left, push-up
+ * - Ghost-frame motion blur simulated via semi-transparent offset copies
+ * - Speed: 'slower' (0.55s) | 'normal' (0.38s) | 'faster' (0.22s)
  */
 
-import type { VideoPanel, KenBurnsPreset, TransitionPreset } from '$lib/stores/videoProject';
+import type { VideoPanel, KenBurnsPreset, TransitionPreset, KenBurnsSpeed, TransitionSpeed } from '$lib/stores/videoProject';
+
+// ─── Ken Burns zoom rate constants ────────────────────────────────────────────
+
+export const KEN_BURNS_ZOOM_RATES: Record<KenBurnsSpeed, number> = {
+  'slow': 0.01,    // 1% per second → 10% max over 10s
+  'medium': 0.02,  // 2% per second → 20% max over 10s
+  'fast': 0.03,    // 3% per second → 30% max over 10s
+};
+
+// ─── Transition duration constants ────────────────────────────────────────────
+
+export const TRANSITION_DURATION: Record<TransitionSpeed, number> = {
+  slower: 0.55,
+  normal: 0.38,
+  faster: 0.22,
+};
+
+const BLUR_SCALE: Record<TransitionSpeed, number> = {
+  slower: 0.7,
+  normal: 1.0,
+  faster: 1.3,
+};
 
 // ─── Easing ──────────────────────────────────────────────────────────────────
 
 export function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function easeInCubic(t: number): number {
+  return t * t * t;
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ─── Ghost-frame motion blur helper ──────────────────────────────────────────
+
+/**
+ * Draws N ghost frames of a draw function along a 2D axis,
+ * simulating motion blur. Call before drawing the sharp final frame.
+ */
+function drawMotionBlur(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  drawFn: () => void,
+  blurX: number,
+  blurY: number,
+  passes = 8,
+  baseAlpha = 0.14
+) {
+  for (let i = 0; i < passes; i++) {
+    const frac = (i / (passes - 1)) - 0.5; // -0.5 → +0.5
+    const falloff = 1 - Math.abs(frac) * 0.5;
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * falloff;
+    ctx.translate(frac * blurX, frac * blurY);
+    drawFn();
+    ctx.restore();
+  }
 }
 
 // ─── Ken Burns frame renderer ─────────────────────────────────────────────────
 
 /**
  * Draw a single Ken Burns frame onto ctx.
- * Scale origin is canvas centre (gotcha #7 in AGENTS.md).
  */
 export function drawKenBurnsFrame(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -25,10 +90,10 @@ export function drawKenBurnsFrame(
   canvasWidth: number,
   canvasHeight: number,
   kenBurns: KenBurnsPreset,
-  kenBurnsSpeed: number,
-  progress: number // 0 → 1 within this panel
+  kenBurnsSpeed: KenBurnsSpeed,
+  progress: number,
+  panelDuration: number
 ): void {
-  const eased = easeInOut(progress) * kenBurnsSpeed;
   const cx = canvasWidth / 2;
   const cy = canvasHeight / 2;
 
@@ -36,10 +101,18 @@ export function drawKenBurnsFrame(
   ctx.translate(cx, cy);
 
   let scale = 1;
-  if (kenBurns === 'zoom-in') {
-    scale = 1 + 0.15 * Math.min(eased, 1);
-  } else if (kenBurns === 'zoom-out') {
-    scale = 1.15 - 0.15 * Math.min(eased, 1);
+
+  if (kenBurns !== 'none') {
+    const effectiveDuration = Math.min(panelDuration, 10);
+    const zoomRate = KEN_BURNS_ZOOM_RATES[kenBurnsSpeed];
+    const maxZoom = effectiveDuration * zoomRate;
+    const eased = easeInOut(progress);
+
+    if (kenBurns === 'zoom-in') {
+      scale = 1 + maxZoom * eased;
+    } else if (kenBurns === 'zoom-out') {
+      scale = 1 + maxZoom * (1 - eased);
+    }
   }
 
   ctx.scale(scale, scale);
@@ -48,14 +121,142 @@ export function drawKenBurnsFrame(
   ctx.restore();
 }
 
-// ─── Transition renderer ──────────────────────────────────────────────────────
+// ─── Individual transition renderers ─────────────────────────────────────────
+
+function renderPushLeft(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  outgoing: ImageBitmap,
+  incoming: ImageBitmap,
+  progress: number,
+  W: number,
+  H: number,
+  blurScale: number
+) {
+  const offset = easeInOut(progress) * W;
+  const blurX  = Math.sin(Math.PI * progress) * 35 * blurScale;
+
+  drawMotionBlur(ctx, () => {
+    ctx.drawImage(outgoing, -offset, 0, W, H);
+    ctx.drawImage(incoming, W - offset, 0, W, H);
+  }, blurX, 0);
+
+  ctx.drawImage(outgoing, -offset, 0, W, H);
+  ctx.drawImage(incoming, W - offset, 0, W, H);
+}
+
+function renderPushUp(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  outgoing: ImageBitmap,
+  incoming: ImageBitmap,
+  progress: number,
+  W: number,
+  H: number,
+  blurScale: number
+) {
+  const offset = easeInOut(progress) * H;
+  const blurY  = Math.sin(Math.PI * progress) * 35 * blurScale;
+
+  drawMotionBlur(ctx, () => {
+    ctx.drawImage(outgoing, 0, -offset, W, H);
+    ctx.drawImage(incoming, 0, H - offset, W, H);
+  }, 0, blurY);
+
+  ctx.drawImage(outgoing, 0, -offset, W, H);
+  ctx.drawImage(incoming, 0, H - offset, W, H);
+}
+
+function renderZoomIn(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  outgoing: ImageBitmap,
+  incoming: ImageBitmap,
+  progress: number,
+  W: number,
+  H: number,
+  blurScale: number
+) {
+  const scaleA     = 1.0 + easeInCubic(progress) * 0.6;
+  const scaleB     = 0.55 + easeOutCubic(progress) * 0.45;
+  const alphaA     = 1 - easeInCubic(progress);
+  const alphaB     = Math.min(1, easeOutCubic(progress) * 1.4);
+  const blurSpread = Math.sin(Math.PI * progress) * 0.10 * blurScale;
+  const passes     = 8;
+  const ghostAlpha = 0.12;
+
+  function drawCentred(clip: ImageBitmap, scale: number, alpha: number) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(scale, scale);
+    ctx.drawImage(clip, -W / 2, -H / 2, W, H);
+    ctx.restore();
+  }
+
+  // Blur ghosts — B first (further back)
+  for (let i = 0; i < passes; i++) {
+    const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
+    drawCentred(incoming, scaleB + spread, ghostAlpha);
+  }
+
+  // Blur ghosts — A on top
+  for (let i = 0; i < passes; i++) {
+    const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
+    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA);
+  }
+
+  // Sharp frames
+  drawCentred(outgoing, scaleA, alphaA);
+  drawCentred(incoming, scaleB, alphaB);
+}
+
+function renderZoomOut(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  outgoing: ImageBitmap,
+  incoming: ImageBitmap,
+  progress: number,
+  W: number,
+  H: number,
+  blurScale: number
+) {
+  const scaleA     = 1.0 - easeInCubic(progress) * 0.6;
+  const scaleB     = 1.6 - easeOutCubic(progress) * 0.6; // always >= 1.0
+  const alphaA     = 1 - easeOutCubic(progress);
+  const blurSpread = Math.sin(Math.PI * progress) * 0.10 * blurScale;
+  const passes     = 8;
+  const ghostAlpha = 0.12;
+
+  function drawCentred(clip: ImageBitmap, scale: number, alpha: number) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(scale, scale);
+    ctx.drawImage(clip, -W / 2, -H / 2, W, H);
+    ctx.restore();
+  }
+
+  // Clip B ghosts — background layer
+  for (let i = 0; i < passes; i++) {
+    const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
+    drawCentred(incoming, scaleB + spread, ghostAlpha);
+  }
+
+  // Sharp clip B
+  drawCentred(incoming, scaleB, 1);
+
+  // Clip A ghosts on top
+  for (let i = 0; i < passes; i++) {
+    const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
+    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA);
+  }
+
+  // Sharp clip A fading out
+  drawCentred(outgoing, scaleA, alphaA);
+}
+
+// ─── Transition renderer (public) ─────────────────────────────────────────────
 
 /**
- * Draw a cross-fade transition frame between two panels.
+ * Draw a dramatic transition frame between two panels.
  * transitionProgress: 0 = fully outgoing, 1 = fully incoming.
- *
- * zoom-in:  outgoing scales up + fades out; incoming scales down into place + fades in.
- * zoom-out: outgoing scales down + fades out; incoming scales up into place + fades in.
  */
 export function drawTransitionFrame(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -64,48 +265,46 @@ export function drawTransitionFrame(
   canvasWidth: number,
   canvasHeight: number,
   transition: TransitionPreset,
-  transitionProgress: number // 0 → 1
+  transitionProgress: number,
+  transitionSpeed: TransitionSpeed = 'normal'
 ): void {
-  const t = transitionProgress;
-  const cx = canvasWidth / 2;
-  const cy = canvasHeight / 2;
+  const W = canvasWidth;
+  const H = canvasHeight;
 
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillRect(0, 0, W, H);
 
   if (transition === 'none' || (!outgoing && !incoming)) {
-    // No transition — just draw incoming
-    if (incoming) ctx.drawImage(incoming, 0, 0, canvasWidth, canvasHeight);
+    if (incoming) ctx.drawImage(incoming, 0, 0, W, H);
     return;
   }
 
-  // Draw outgoing layer
-  if (outgoing) {
-    ctx.save();
-    ctx.globalAlpha = 1 - t;
-    ctx.translate(cx, cy);
-    let outScale = 1;
-    if (transition === 'zoom-in')  outScale = 1 + 0.15 * t;   // scales up as it fades out
-    if (transition === 'zoom-out') outScale = 1 - 0.1 * t;    // shrinks as it fades out
-    ctx.scale(outScale, outScale);
-    ctx.translate(-cx, -cy);
-    ctx.drawImage(outgoing, 0, 0, canvasWidth, canvasHeight);
-    ctx.restore();
+  // If one clip is missing, just show whichever exists
+  if (!outgoing) {
+    if (incoming) ctx.drawImage(incoming, 0, 0, W, H);
+    return;
+  }
+  if (!incoming) {
+    ctx.drawImage(outgoing, 0, 0, W, H);
+    return;
   }
 
-  // Draw incoming layer
-  if (incoming) {
-    ctx.save();
-    ctx.globalAlpha = t;
-    ctx.translate(cx, cy);
-    let inScale = 1;
-    if (transition === 'zoom-in')  inScale = 1.15 - 0.15 * t; // starts large, settles to 1.0
-    if (transition === 'zoom-out') inScale = 1 + 0.1 * (1 - t); // starts slightly large, settles
-    ctx.scale(inScale, inScale);
-    ctx.translate(-cx, -cy);
-    ctx.drawImage(incoming, 0, 0, canvasWidth, canvasHeight);
-    ctx.restore();
+  const bScale = BLUR_SCALE[transitionSpeed];
+
+  switch (transition) {
+    case 'push-left':
+      renderPushLeft(ctx, outgoing, incoming, transitionProgress, W, H, bScale);
+      break;
+    case 'push-up':
+      renderPushUp(ctx, outgoing, incoming, transitionProgress, W, H, bScale);
+      break;
+    case 'zoom-in':
+      renderZoomIn(ctx, outgoing, incoming, transitionProgress, W, H, bScale);
+      break;
+    case 'zoom-out':
+      renderZoomOut(ctx, outgoing, incoming, transitionProgress, W, H, bScale);
+      break;
   }
 
   ctx.globalAlpha = 1;
@@ -114,11 +313,10 @@ export function drawTransitionFrame(
 // ─── Transition window helpers ────────────────────────────────────────────────
 
 /**
- * Returns the transition duration in seconds for a given transitionSpeed.
- * transitionSpeed 0.5 → 0.25s, 1.0 → 0.5s, 2.0 → 1.0s
+ * Returns the transition duration in seconds for a given TransitionSpeed.
  */
-export function transitionDuration(transitionSpeed: number): number {
-  return 0.5 * transitionSpeed;
+export function transitionDuration(speed: TransitionSpeed): number {
+  return TRANSITION_DURATION[speed];
 }
 
 /**
@@ -129,7 +327,7 @@ export function getTransitionState(
   panels: VideoPanel[],
   currentTime: number,
   transition: TransitionPreset,
-  transitionSpeed: number
+  transitionSpeed: TransitionSpeed
 ): { inTransition: boolean; outgoingIndex: number; incomingIndex: number; progress: number } {
   const noTransition = { inTransition: false, outgoingIndex: -1, incomingIndex: -1, progress: 0 };
 

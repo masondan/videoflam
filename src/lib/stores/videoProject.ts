@@ -3,7 +3,9 @@
 
 export type AspectRatio = '9:16' | '1:1' | '16:9';
 export type KenBurnsPreset = 'none' | 'zoom-in' | 'zoom-out';
-export type TransitionPreset = 'none' | 'zoom-in' | 'zoom-out';
+export type KenBurnsSpeed = 'slow' | 'medium' | 'fast';
+export type TransitionPreset = 'none' | 'zoom-in' | 'zoom-out' | 'push-left' | 'push-up';
+export type TransitionSpeed = 'slower' | 'normal' | 'faster';
 
 export interface WordTimestamp {
   word: string;
@@ -24,9 +26,9 @@ export interface VideoPanel {
 export interface VideoProject {
   aspectRatio: AspectRatio;
   kenBurns: KenBurnsPreset;
-  kenBurnsSpeed: number;     // 0.5 (slow) to 2.0 (fast), default 1.0
+  kenBurnsSpeed: KenBurnsSpeed;  // 'slow' (1%/s) | 'medium' (2%/s) | 'fast' (3%/s)
   transition: TransitionPreset;
-  transitionSpeed: number;   // 0.5 to 2.0, default 1.0
+  transitionSpeed: TransitionSpeed; // 'slower' | 'normal' | 'faster'
   audio: {
     blob: Blob;
     duration: number;
@@ -45,9 +47,9 @@ export function createDefaultProject(): VideoProject {
   return {
     aspectRatio: '9:16',
     kenBurns: 'zoom-in',
-    kenBurnsSpeed: 1.0,
+    kenBurnsSpeed: 'medium',
     transition: 'none',
-    transitionSpeed: 1.0,
+    transitionSpeed: 'normal',
     audio: null,
     panels: [],
     script: null,

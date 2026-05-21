@@ -11,7 +11,7 @@
 
 import { checkWebCodecsSupport } from './webcodecs-export';
 import type { ExportProgress, ProgressCallback, ExportResult } from './video-export';
-import type { VideoPanel, AspectRatio, KenBurnsPreset, TransitionPreset } from '$lib/stores/videoProject';
+import type { VideoPanel, AspectRatio, KenBurnsPreset, KenBurnsSpeed, TransitionPreset, TransitionSpeed } from '$lib/stores/videoProject';
 import { CANVAS_DIMENSIONS } from '$lib/stores/videoProject';
 import {
   easeInOut,
@@ -37,9 +37,9 @@ export interface ExplainerExportOptions {
   audioBlob: Blob;
   aspectRatio: AspectRatio;
   kenBurns: KenBurnsPreset;
-  kenBurnsSpeed: number;
+  kenBurnsSpeed: KenBurnsSpeed;
   transition: TransitionPreset;
-  transitionSpeed: number;
+  transitionSpeed: TransitionSpeed;
   onProgress?: ProgressCallback;
 }
 
@@ -199,7 +199,8 @@ async function exportExplainerWithWebCodecs(
         videoWidth,
         videoHeight,
         transition,
-        ts.progress
+        ts.progress,
+        transitionSpeed
       );
     } else if (activePanelIndex >= 0 && bitmaps[activePanelIndex]) {
       const panel = panels[activePanelIndex];
@@ -215,7 +216,8 @@ async function exportExplainerWithWebCodecs(
         videoHeight,
         kenBurns,
         kenBurnsSpeed,
-        panelProgress
+        panelProgress,
+        panelDuration
       );
     }
 
@@ -375,7 +377,8 @@ async function exportExplainerWithMediaRecorder(
           canvasWidth,
           canvasHeight,
           transition,
-          ts.progress
+          ts.progress,
+          transitionSpeed
         );
       } else {
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -388,7 +391,7 @@ async function exportExplainerWithMediaRecorder(
           const panelProgress = panelDuration > 0
             ? Math.min((currentTime - panel.startTime) / panelDuration, 1)
             : 1;
-          drawKenBurnsFrame(ctx, bitmaps[activePanelIndex]!, canvasWidth, canvasHeight, kenBurns, kenBurnsSpeed, panelProgress);
+          drawKenBurnsFrame(ctx, bitmaps[activePanelIndex]!, canvasWidth, canvasHeight, kenBurns, kenBurnsSpeed, panelProgress, panelDuration);
         }
       }
 

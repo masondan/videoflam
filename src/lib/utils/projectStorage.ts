@@ -13,7 +13,9 @@ import type {
   VideoPanel,
   AspectRatio,
   KenBurnsPreset,
+  KenBurnsSpeed,
   TransitionPreset,
+  TransitionSpeed,
 } from '$lib/stores/videoProject';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -41,9 +43,9 @@ export interface ProjectMeta {
   updatedAt: number;
   aspectRatio: AspectRatio;
   kenBurns: KenBurnsPreset;
-  kenBurnsSpeed: number;
+  kenBurnsSpeed: KenBurnsSpeed;
   transition: TransitionPreset;
-  transitionSpeed: number;
+  transitionSpeed: TransitionSpeed;
   script: string | null;
   audioDuration: number;
   hasAudio: boolean;
@@ -240,7 +242,9 @@ export async function loadProject(projectId: string): Promise<VideoProject | nul
     kenBurns: meta.kenBurns,
     kenBurnsSpeed: meta.kenBurnsSpeed,
     transition: meta.transition,
-    transitionSpeed: meta.transitionSpeed,
+    transitionSpeed: (['slower', 'normal', 'faster'] as TransitionSpeed[]).includes(meta.transitionSpeed as TransitionSpeed)
+      ? meta.transitionSpeed as TransitionSpeed
+      : 'normal',
     audio,
     panels,
     script: meta.script,

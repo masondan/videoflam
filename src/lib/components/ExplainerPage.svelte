@@ -2,7 +2,6 @@
   import VoiceoverImagesDrawer from './explainer/VoiceoverImagesDrawer.svelte';
   import ScriptDrawer from './explainer/ScriptDrawer.svelte';
   import RecordingDrawer from './explainer/RecordingDrawer.svelte';
-  import KenBurnsPreview from './explainer/KenBurnsPreview.svelte';
   import ArchivePage from './explainer/ArchivePage.svelte';
   import {
     createDefaultProject,
@@ -11,6 +10,7 @@
     type AspectRatio,
     type KenBurnsPreset,
     type TransitionPreset,
+    type TransitionSpeed,
   } from '$lib/stores/videoProject';
   import { smartExportExplainer } from '$lib/utils/explainer-export';
   import { downloadBlob } from '$lib/utils/video-export';
@@ -198,7 +198,8 @@
           canvasWidth,
           canvasHeight,
           project.transition,
-          ts.progress
+          ts.progress,
+          project.transitionSpeed
         );
       } else {
         // Find active panel at current time
@@ -234,7 +235,8 @@
               canvasHeight,
               project.kenBurns,
               project.kenBurnsSpeed,
-              panelProgress
+              panelProgress,
+              panelDuration
             );
           }
         }
@@ -473,33 +475,42 @@
     {#if openEffectsPanel === 'pan-zoom'}
       <div class="dropdown-content">
         <div class="kb-options">
-          {#each (['none', 'zoom-in', 'zoom-out'] as KenBurnsPreset[]) as preset}
+          {#each ([
+            { value: 'none', label: 'None', icon: '/icons/icon-none.svg' },
+            { value: 'zoom-in', label: 'Zoom In', icon: '/icons/icon-zoom-in.svg' },
+            { value: 'zoom-out', label: 'Zoom Out', icon: '/icons/icon-zoom-out.svg' },
+          ] as { value: KenBurnsPreset; label: string; icon: string }[]) as opt}
             <button
               type="button"
               class="kb-option-btn"
-              onclick={() => setKenBurns(preset)}
-              aria-pressed={project.kenBurns === preset}
+              class:kb-option-btn--active={project.kenBurns === opt.value}
+              onclick={() => setKenBurns(opt.value)}
+              aria-pressed={project.kenBurns === opt.value}
             >
-              <KenBurnsPreview {preset} active={project.kenBurns === preset} />
+              <img src={opt.icon} alt="" class="kb-option-icon" />
+              {opt.label}
             </button>
           {/each}
         </div>
         {#if project.kenBurns !== 'none'}
           <div class="speed-row">
-            <label class="speed-label" for="kb-speed-slider">
-              Speed
-              <span class="speed-value">{project.kenBurnsSpeed === 0.5 ? 'Slow' : project.kenBurnsSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
-            </label>
+            <label class="speed-label" for="kb-speed-slider">Speed</label>
             <input
               id="kb-speed-slider"
               type="range"
               class="speed-slider"
-              min="0.5"
-              max="2.0"
-              step="0.25"
-              value={project.kenBurnsSpeed}
-              oninput={(e) => { project = { ...project, kenBurnsSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
+              min="0"
+              max="2"
+              step="1"
+              value={project.kenBurnsSpeed === 'slow' ? 0 : project.kenBurnsSpeed === 'fast' ? 2 : 1}
+              oninput={(e) => {
+                const v = parseInt((e.target as HTMLInputElement).value);
+                project = { ...project, kenBurnsSpeed: v === 0 ? 'slow' : v === 2 ? 'fast' : 'medium' };
+              }}
             />
+            <span class="speed-value">
+              {project.kenBurnsSpeed === 'slow' ? 'Slower' : project.kenBurnsSpeed === 'fast' ? 'Faster' : 'Normal'}
+            </span>
           </div>
         {/if}
       </div>
@@ -523,39 +534,67 @@
     </button>
     {#if openEffectsPanel === 'transitions'}
       <div class="dropdown-content">
-        <div class="transition-options">
-          {#each ([
-            { value: 'none', label: 'None' },
-            { value: 'zoom-in', label: 'Zoom In' },
-            { value: 'zoom-out', label: 'Zoom Out' },
-          ] as { value: TransitionPreset; label: string }[]) as opt}
-            <button
-              type="button"
-              class="transition-option-btn"
-              class:transition-option-btn--active={project.transition === opt.value}
-              onclick={() => { project = { ...project, transition: opt.value }; }}
-              aria-pressed={project.transition === opt.value}
-            >
-              {opt.label}
-            </button>
-          {/each}
+        <div class="transition-scroll-wrapper">
+          <button
+            type="button"
+            class="transition-scroll-btn transition-scroll-btn--left"
+            aria-label="Scroll left"
+            onclick={() => {
+              const el = document.querySelector('.transition-options-scroll') as HTMLElement;
+              if (el) el.scrollBy({ left: -120, behavior: 'smooth' });
+            }}
+          >
+            <img src="/icons/icon-left.svg" alt="" width="14" height="14" />
+          </button>
+          <div class="transition-options-scroll">
+            {#each ([
+              { value: 'none',      label: 'None',       icon: '/icons/icon-none.svg' },
+              { value: 'zoom-in',   label: 'Zoom In',    icon: '/icons/icon-zoom-in.svg' },
+              { value: 'zoom-out',  label: 'Zoom Out',   icon: '/icons/icon-zoom-out.svg' },
+              { value: 'push-left', label: 'Push Left',  icon: '/icons/icon-left.svg' },
+              { value: 'push-up',   label: 'Push Up',    icon: '/icons/icon-up.svg' },
+            ] as { value: TransitionPreset; label: string; icon: string }[]) as opt}
+              <button
+                type="button"
+                class="transition-option-btn"
+                class:transition-option-btn--active={project.transition === opt.value}
+                onclick={() => { project = { ...project, transition: opt.value }; }}
+                aria-pressed={project.transition === opt.value}
+              >
+                <img src={opt.icon} alt="" class="transition-option-icon" />
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+          <button
+            type="button"
+            class="transition-scroll-btn transition-scroll-btn--right"
+            aria-label="Scroll right"
+            onclick={() => {
+              const el = document.querySelector('.transition-options-scroll') as HTMLElement;
+              if (el) el.scrollBy({ left: 120, behavior: 'smooth' });
+            }}
+          >
+            <img src="/icons/icon-right.svg" alt="" width="14" height="14" />
+          </button>
         </div>
         {#if project.transition !== 'none'}
           <div class="speed-row">
-            <label class="speed-label" for="transition-speed-slider">
-              Speed
-              <span class="speed-value">{project.transitionSpeed === 0.5 ? 'Slow' : project.transitionSpeed === 2.0 ? 'Fast' : 'Medium'}</span>
-            </label>
+            <label class="speed-label" for="transition-speed-slider">Speed</label>
             <input
               id="transition-speed-slider"
               type="range"
               class="speed-slider"
-              min="0.5"
-              max="2.0"
-              step="0.25"
-              value={project.transitionSpeed}
-              oninput={(e) => { project = { ...project, transitionSpeed: parseFloat((e.target as HTMLInputElement).value) }; }}
+              min="0"
+              max="2"
+              step="1"
+              value={project.transitionSpeed === 'slower' ? 0 : project.transitionSpeed === 'faster' ? 2 : 1}
+              oninput={(e) => {
+                const v = parseInt((e.target as HTMLInputElement).value);
+                project = { ...project, transitionSpeed: (v === 0 ? 'slower' : v === 2 ? 'faster' : 'normal') as TransitionSpeed };
+              }}
             />
+            <span class="speed-value">{project.transitionSpeed === 'slower' ? 'Slower' : project.transitionSpeed === 'faster' ? 'Faster' : 'Normal'}</span>
           </div>
         {/if}
       </div>
@@ -923,24 +962,11 @@
   }
 
   .kb-option-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
     flex: 1;
     display: flex;
+    align-items: center;
     justify-content: center;
-  }
-
-  /* Transition options */
-  .transition-options {
-    display: flex;
-    gap: var(--spacing-sm);
-    justify-content: space-around;
-  }
-
-  .transition-option-btn {
-    flex: 1;
+    gap: 6px;
     padding: var(--spacing-xs) var(--spacing-sm);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
@@ -952,35 +978,167 @@
     transition: all 0.15s;
   }
 
+  .kb-option-btn--active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+  }
+
+  .kb-option-btn--active .kb-option-icon {
+    filter: brightness(0) invert(1);
+  }
+
+  .kb-option-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Transition scroll row */
+  .transition-scroll-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+  }
+
+  .transition-options-scroll {
+    display: flex;
+    gap: var(--spacing-xs);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex: 1;
+    padding: 2px 0;
+  }
+
+  .transition-options-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .transition-scroll-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-white);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+    padding: 0;
+  }
+
+  .transition-scroll-btn:hover {
+    background: var(--color-highlight);
+    border-color: var(--color-border-active);
+  }
+
+  .transition-scroll-btn img {
+    opacity: 0.5;
+    width: 14px;
+    height: 14px;
+  }
+
+  .transition-option-btn {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-white);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 64px;
+  }
+
+  .transition-option-icon {
+    width: 20px;
+    height: 20px;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+
   .transition-option-btn--active {
     background: var(--color-primary);
     border-color: var(--color-primary);
     color: #fff;
   }
 
-  /* Speed slider */
+  .transition-option-btn--active .transition-option-icon {
+    opacity: 1;
+    filter: brightness(0) invert(1);
+  }
+
+  /* Speed row (Ken Burns + Transitions) */
   .speed-row {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-xs);
   }
 
   .speed-label {
-    display: flex;
-    justify-content: space-between;
     font-size: var(--font-size-xs);
     color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .speed-value {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
     font-weight: var(--font-weight-medium);
-    color: var(--text-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 44px;
+    text-align: right;
   }
 
   .speed-slider {
-    width: 100%;
-    accent-color: var(--color-primary);
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border);
+    outline: none;
     cursor: pointer;
+  }
+
+  .speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
+  .speed-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
 
   /* Preview */
