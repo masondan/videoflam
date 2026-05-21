@@ -553,6 +553,14 @@
 
 <div class="explainer-page">
 
+  <!-- Helper section -->
+  <div class="helper-section">
+    <h2 class="helper-headline">Explainer Video</h2>
+    <p class="helper-text">
+      Combine a voiceover with images to create an explainer. Add subtitles for added impact.
+    </p>
+  </div>
+
   <!-- Aspect ratio + archive row -->
   <div class="ratio-row">
     {#each (['9:16', '1:1', '16:9'] as AspectRatio[]) as ratio}
@@ -956,6 +964,31 @@
     max-width: 480px;
     margin: 0 auto;
     padding-bottom: var(--spacing-xl);
+  }
+
+  /* Helper section */
+  .helper-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 0 var(--spacing-md);
+  }
+
+  .helper-headline {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: #555555;
+    margin: 0;
+    text-align: center;
+  }
+
+  .helper-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: var(--line-height-normal);
+    margin: 0;
   }
 
   /* Script link */

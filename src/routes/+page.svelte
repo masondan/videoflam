@@ -17,36 +17,33 @@
 
 <div class="app-container">
   <header class="app-header">
-    <flam-nav current="videoflam"></flam-nav>
-    <div class="header-center">
+    <div class="header-left">
+      <flam-nav current="videoflam"></flam-nav>
       <img src="/logos/logo-videoflam-logotype.png" alt="VideoFlam" class="logotype" />
     </div>
-    <div class="header-spacer"></div>
+    
+    <nav class="header-nav" aria-label="App sections">
+      <button
+        type="button"
+        class="nav-btn"
+        class:nav-btn--active={activeTab === 'explainer'}
+        onclick={() => (activeTab = 'explainer')}
+        aria-label="Explainer tab"
+      >
+        <img src="/icons/icon-explainer.svg" alt="" class="nav-icon" />
+      </button>
+      
+      <button
+        type="button"
+        class="nav-btn"
+        class:nav-btn--active={activeTab === 'subtitle'}
+        onclick={() => (activeTab = 'subtitle')}
+        aria-label="Subtitle tab"
+      >
+        <img src="/icons/icon-subtitle.svg" alt="" class="nav-icon" />
+      </button>
+    </nav>
   </header>
-
-  <!-- Tab bar -->
-  <nav class="tab-bar" aria-label="App sections">
-    <button
-      type="button"
-      class="tab-btn"
-      class:tab-btn--active={activeTab === 'subtitle'}
-      onclick={() => (activeTab = 'subtitle')}
-      aria-selected={activeTab === 'subtitle'}
-      role="tab"
-    >
-      Subtitle
-    </button>
-    <button
-      type="button"
-      class="tab-btn"
-      class:tab-btn--active={activeTab === 'explainer'}
-      onclick={() => (activeTab = 'explainer')}
-      aria-selected={activeTab === 'explainer'}
-      role="tab"
-    >
-      Explainer
-    </button>
-  </nav>
 
   <main class="main-content">
     {#if activeTab === 'subtitle'}
@@ -69,55 +66,65 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: 16px var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
     background: var(--bg-white);
   }
 
-  .header-center {
+  .header-left {
     display: flex;
     align-items: center;
-    justify-content: center;
-    flex: 1;
-  }
-
-  .header-spacer {
-    width: 40px;
+    gap: 10px;
   }
 
   .logotype {
     height: 26px;
+    width: auto;
   }
 
-  /* Tab bar */
-  .tab-bar {
+  .header-nav {
     display: flex;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--bg-white);
-    padding: 0 var(--spacing-lg);
+    gap: 10px;
   }
 
-  .tab-btn {
-    background: none;
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
     border: none;
-    border-bottom: 2px solid transparent;
-    padding: var(--spacing-sm) var(--spacing-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    color: var(--text-secondary);
+    background-color: #f0f0f0;
     cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
-    margin-bottom: -1px; /* overlap container border */
+    transition: background-color 0.15s;
   }
 
-  .tab-btn--active {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
-    font-weight: var(--font-weight-semibold);
+  .nav-btn:hover:not(.nav-btn--active) {
+    background-color: #e4e4e4;
   }
 
-  .tab-btn:hover:not(.tab-btn--active) {
-    color: var(--text-primary);
+  .nav-btn--active {
+    background-color: #5422b0;
+  }
+
+  .nav-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nav-btn:not(.nav-btn--active) .nav-icon {
+    filter: brightness(0) saturate(100%) invert(25%) sepia(0%) saturate(0%) brightness(100%) contrast(90%);
+  }
+
+  .nav-btn.nav-btn--active .nav-icon {
+    filter: brightness(0) invert(1);
+  }
+
+  /* Adjust subtitle icon size (2nd button - adjust width/height value to match explainer) */
+  .nav-btn:nth-child(2) .nav-icon {
+    width: 19px;
+    height: 19px;
   }
 
   .main-content {

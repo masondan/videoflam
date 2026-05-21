@@ -1,7 +1,7 @@
 {
   "name": "VideoFlam",
   "short_name": "VideoFlam",
-  "description": "Simple subtitles for video.",
+  "description": "Create a video explainer with voiceover, images and subtitles.",
   "start_url": "/",
   "scope": "/",
   "display": "browser",

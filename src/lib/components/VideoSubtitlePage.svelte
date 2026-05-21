@@ -777,7 +777,7 @@
     <div class="helper-section">
       <h2 class="helper-headline">Video Subtitles</h2>
       <p class="helper-text">
-        Select a video or drag and drop to add subtitles (MP4, MOV, WebM)
+        Add a video (MP4, MOV, WebM) then tap Generate to create and style your subtitles.
       </p>
     </div>
   {/if}
