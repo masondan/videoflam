@@ -132,16 +132,24 @@ function renderPushLeft(
   H: number,
   blurScale: number
 ) {
-  const offset = easeInOut(progress) * W;
-  const blurX  = Math.sin(Math.PI * progress) * 35 * blurScale;
+  // Clamp progress to [0, 1] to prevent blur from extending past transition end
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  
+  const offset = easeInOut(clampedProgress) * W;
+  const blurX  = Math.sin(Math.PI * clampedProgress) * 35 * blurScale;
+  const blurAmount = Math.sin(Math.PI * clampedProgress) * 8 * blurScale;
 
   drawMotionBlur(ctx, () => {
     ctx.drawImage(outgoing, -offset, 0, W, H);
     ctx.drawImage(incoming, W - offset, 0, W, H);
   }, blurX, 0);
 
+  // Sharp frames with motion blur filter
+  ctx.save();
+  ctx.filter = `blur(${blurAmount}px)`;
   ctx.drawImage(outgoing, -offset, 0, W, H);
   ctx.drawImage(incoming, W - offset, 0, W, H);
+  ctx.restore();
 }
 
 function renderPushUp(
@@ -153,16 +161,24 @@ function renderPushUp(
   H: number,
   blurScale: number
 ) {
-  const offset = easeInOut(progress) * H;
-  const blurY  = Math.sin(Math.PI * progress) * 35 * blurScale;
+  // Clamp progress to [0, 1] to prevent blur from extending past transition end
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  
+  const offset = easeInOut(clampedProgress) * H;
+  const blurY  = Math.sin(Math.PI * clampedProgress) * 35 * blurScale;
+  const blurAmount = Math.sin(Math.PI * clampedProgress) * 8 * blurScale;
 
   drawMotionBlur(ctx, () => {
     ctx.drawImage(outgoing, 0, -offset, W, H);
     ctx.drawImage(incoming, 0, H - offset, W, H);
   }, 0, blurY);
 
+  // Sharp frames with motion blur filter
+  ctx.save();
+  ctx.filter = `blur(${blurAmount}px)`;
   ctx.drawImage(outgoing, 0, -offset, W, H);
   ctx.drawImage(incoming, 0, H - offset, W, H);
+  ctx.restore();
 }
 
 function renderZoomIn(
@@ -174,17 +190,29 @@ function renderZoomIn(
   H: number,
   blurScale: number
 ) {
-  const scaleA     = 1.0 + easeInCubic(progress) * 0.6;
-  const scaleB     = 0.55 + easeOutCubic(progress) * 0.45;
-  const alphaA     = 1 - easeInCubic(progress);
-  const alphaB     = Math.min(1, easeOutCubic(progress) * 1.4);
-  const blurSpread = Math.sin(Math.PI * progress) * 0.20 * blurScale;
-  const passes     = 6;
-  const ghostAlpha = 0.20;
+  // Clamp progress to [0, 1] to prevent blur/brightness from extending past transition end
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  
+  const scaleA     = 1.0 + easeInCubic(clampedProgress) * 0.6;
+  const scaleB     = 0.55 + easeOutCubic(clampedProgress) * 0.45;
+  const alphaA     = 1 - easeInCubic(clampedProgress);
+  const alphaB     = Math.min(1, easeOutCubic(clampedProgress) * 1.4);
+  const blurSpread = Math.sin(Math.PI * clampedProgress) * 0.10 * blurScale;
+  
+  // Motion blur on the images themselves — peaks at progress = 0.5 (mid-transition, max velocity)
+  // Clamped progress ensures blur is exactly 0 at transition end (no jitter)
+  const blurAmount = Math.sin(Math.PI * clampedProgress) * 10 * blurScale;
+  
+  // Optional: brief brightness flash at the cut point for dramatic effect
+  const brightness = 1 + Math.sin(Math.PI * clampedProgress) * 0.15;
+  
+  const passes     = 8;
+  const ghostAlpha = 0.12;
 
-  function drawCentred(clip: ImageBitmap, scale: number, alpha: number) {
+  function drawCentred(clip: ImageBitmap, scale: number, alpha: number, blur: number) {
     ctx.save();
     ctx.globalAlpha = alpha;
+    ctx.filter = `blur(${blur}px) brightness(${brightness})`;
     ctx.translate(W / 2, H / 2);
     ctx.scale(scale, scale);
     ctx.drawImage(clip, -W / 2, -H / 2, W, H);
@@ -194,18 +222,18 @@ function renderZoomIn(
   // Blur ghosts — B first (further back)
   for (let i = 0; i < passes; i++) {
     const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
-    drawCentred(incoming, scaleB + spread, ghostAlpha);
+    drawCentred(incoming, scaleB + spread, ghostAlpha, blurAmount);
   }
 
   // Blur ghosts — A on top
   for (let i = 0; i < passes; i++) {
     const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
-    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA);
+    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA, blurAmount);
   }
 
-  // Sharp frames
-  drawCentred(outgoing, scaleA, alphaA);
-  drawCentred(incoming, scaleB, alphaB);
+  // Sharp frames (with motion blur filter applied)
+  drawCentred(outgoing, scaleA, alphaA, blurAmount);
+  drawCentred(incoming, scaleB, alphaB, blurAmount);
 }
 
 function renderZoomOut(
@@ -217,16 +245,27 @@ function renderZoomOut(
   H: number,
   blurScale: number
 ) {
-  const scaleA     = 1.0 - easeInCubic(progress) * 0.6;
-  const scaleB     = 1.6 - easeOutCubic(progress) * 0.6; // always >= 1.0
-  const alphaA     = 1 - easeOutCubic(progress);
-  const blurSpread = Math.sin(Math.PI * progress) * 0.10 * blurScale;
+  // Clamp progress to [0, 1] to prevent blur from extending past transition end
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  
+  const scaleA     = 1.0 - easeInCubic(clampedProgress) * 0.6;
+  const scaleB     = 1.6 - easeOutCubic(clampedProgress) * 0.6; // always >= 1.0
+  const alphaA     = 1 - easeOutCubic(clampedProgress);
+  const blurSpread = Math.sin(Math.PI * clampedProgress) * 0.10 * blurScale;
+  
+  // Motion blur on the images themselves — peaks at progress = 0.5 (mid-transition, max velocity)
+  const blurAmount = Math.sin(Math.PI * clampedProgress) * 10 * blurScale;
+  
+  // Optional: brief brightness flash at the cut point for dramatic effect
+  const brightness = 1 + Math.sin(Math.PI * clampedProgress) * 0.15;
+  
   const passes     = 8;
   const ghostAlpha = 0.12;
 
-  function drawCentred(clip: ImageBitmap, scale: number, alpha: number) {
+  function drawCentred(clip: ImageBitmap, scale: number, alpha: number, blur: number) {
     ctx.save();
     ctx.globalAlpha = alpha;
+    ctx.filter = `blur(${blur}px) brightness(${brightness})`;
     ctx.translate(W / 2, H / 2);
     ctx.scale(scale, scale);
     ctx.drawImage(clip, -W / 2, -H / 2, W, H);
@@ -236,20 +275,20 @@ function renderZoomOut(
   // Clip B ghosts — background layer
   for (let i = 0; i < passes; i++) {
     const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
-    drawCentred(incoming, scaleB + spread, ghostAlpha);
+    drawCentred(incoming, scaleB + spread, ghostAlpha, blurAmount);
   }
 
   // Sharp clip B
-  drawCentred(incoming, scaleB, 1);
+  drawCentred(incoming, scaleB, 1, blurAmount);
 
   // Clip A ghosts on top
   for (let i = 0; i < passes; i++) {
     const spread = ((i / (passes - 1)) - 0.5) * blurSpread;
-    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA);
+    drawCentred(outgoing, scaleA + spread, ghostAlpha * alphaA, blurAmount);
   }
 
   // Sharp clip A fading out
-  drawCentred(outgoing, scaleA, alphaA);
+  drawCentred(outgoing, scaleA, alphaA, blurAmount);
 }
 
 // ─── Transition renderer (public) ─────────────────────────────────────────────
