@@ -2,6 +2,13 @@
 	import '../app.css';
 
 	let { children } = $props();
+
+	// Suppress PWA install prompt
+	if (typeof window !== 'undefined') {
+		window.addEventListener('beforeinstallprompt', (e) => {
+			e.preventDefault();
+		});
+	}
 </script>
 
 <svelte:head>

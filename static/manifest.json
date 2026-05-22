@@ -4,7 +4,7 @@
   "description": "Add subtitles and title overlays to videos with simple controls.",
   "start_url": "/",
   "scope": "/",
-  "display": "browser",
+  "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#5422b0",
   "theme_color": "#5422b0",
