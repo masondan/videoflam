@@ -19,9 +19,10 @@
     project: VideoProject;
     onSave: (updates: Partial<VideoProject>) => void;
     onClose: () => void;
+    onOpenScriptDrawer?: () => void;
   }
 
-  let { project, onSave, onClose }: Props = $props();
+  let { project, onSave, onClose, onOpenScriptDrawer }: Props = $props();
 
   // ── Local state ──────────────────────────────────────────────────────────────
   // untrack() snapshots the prop value at mount without creating a reactive dependency
@@ -429,7 +430,7 @@
         <p class="empty-hint">No transcript yet — upload audio to generate panels.</p>
       {:else if !audioUrl}
         <ul class="empty-hint-list">
-          <li><span class="hint-number">1</span> <strong>Upload</strong> a clear voice recording or <strong>record</strong> your own voiceover from a script.</li>
+          <li><span class="hint-number">1</span> <strong>Upload</strong> a clear voice recording or <strong>record</strong> your own voiceover from a script. Try our <button type="button" class="script-generator-link" onclick={onOpenScriptDrawer}><strong>script generator</strong></button>.</li>
           <li><span class="hint-number">2</span> <strong>Add images</strong>. Your audio is converted to text blocks - images automatically match the length of words spoken in each block. You can join or separate blocks to change the duration of images.</li>
           <li><span class="hint-number">3</span> <strong>Save</strong> to preview your video. Add <strong>transitions,</strong> image <strong>pan & zoom</strong> and <strong>subtitles.</strong> That's it... <strong>Export</strong> your video explainer.</li>
         </ul>
@@ -750,6 +751,23 @@
     font-weight: 900;
     color: #5422b0;
     margin-right: 0.25em;
+  }
+
+  .script-generator-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    font-family: inherit;
+    color: #5422b0;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+
+  .script-generator-link:hover {
+    opacity: 0.8;
   }
 
   .empty-hint-list li:not(:last-child)::after {

@@ -895,6 +895,7 @@
     {project}
     onSave={handleVoiceoverSave}
     onClose={() => (showVoiceoverDrawer = false)}
+    onOpenScriptDrawer={() => (showScriptDrawer = true)}
   />
 {/if}
 
