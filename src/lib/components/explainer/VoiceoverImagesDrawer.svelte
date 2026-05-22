@@ -429,9 +429,9 @@
         <p class="empty-hint">No transcript yet — upload audio to generate panels.</p>
       {:else if !audioUrl}
         <ul class="empty-hint-list">
-          <li><strong>Upload</strong> a clear recording or <strong>record</strong> your own voiceover.</li>
-          <li>Your audio is converted to text blocks. Adjust and add images.</li>
-          <li>Save to preview your video, add effects and export.</li>
+          <li><span class="hint-number">1</span> <strong>Upload</strong> a clear voice recording or <strong>record</strong> your own voiceover from a script.</li>
+          <li><span class="hint-number">2</span> <strong>Add images</strong>. Your audio is converted to text blocks - images automatically match the length of words spoken in each block. You can join or separate blocks to change the duration of images.</li>
+          <li><span class="hint-number">3</span> <strong>Save</strong> to preview your video. Add <strong>transitions,</strong> image <strong>pan & zoom</strong> and <strong>subtitles.</strong> That's it... <strong>Export</strong> your video explainer.</li>
         </ul>
       {/if}
     </div>
@@ -731,7 +731,7 @@
 
   .empty-hint-list {
     font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    color: #333333;
     padding: var(--spacing-xl) var(--spacing-md);
     margin: 0;
     list-style: none;
@@ -744,6 +744,12 @@
     text-align: center;
     line-height: var(--line-height-normal);
     position: relative;
+  }
+
+  .hint-number {
+    font-weight: 900;
+    color: #5422b0;
+    margin-right: 0.25em;
   }
 
   .empty-hint-list li:not(:last-child)::after {
