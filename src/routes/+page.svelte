@@ -4,7 +4,7 @@
   import { activeTabStore } from '$lib/stores/activeTab';
 
   type Tab = 'subtitle' | 'explainer';
-  let activeTab = $state<Tab>('subtitle');
+  let activeTab = $state<Tab>('explainer');
 
   // Keep local state in sync with the store (ExplainerPage writes to it)
   activeTabStore.subscribe((tab) => {
