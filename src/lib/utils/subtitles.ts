@@ -237,29 +237,181 @@ export function calculateCharsPerLine(
 }
 
 /**
- * Rebuilds the words array from edited text, preserving timing from original words.
- * When a user edits subtitle text, the words array still contains the original words.
- * This function regenerates the words array to match the edited text, distributing
- * the original timing across the new words.
+ * Normalizes a word for case/punctuation-insensitive comparison: lowercases
+ * and strips all characters except letters, numbers, and apostrophes (so
+ * contractions like "don't" still compare as a single token).
+ */
+function normalizeForCompare(word: string): string {
+	return word.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+}
+
+/**
+ * Distributes a run of new words across [startTime, endTime), weighted by
+ * each word's character length rather than evenly — longer words get
+ * proportionally more time. Used to time inserted/replaced words that have
+ * no corresponding original word to inherit timing from.
+ */
+function spreadWordsAcrossGap(
+	words: string[],
+	startTime: number,
+	endTime: number
+): WordTimestamp[] {
+	const totalDuration = Math.max(endTime - startTime, 0);
+	const totalChars = words.reduce((sum, w) => sum + Math.max(w.length, 1), 0) || 1;
+
+	const result: WordTimestamp[] = [];
+	let cursor = startTime;
+	for (const word of words) {
+		const weight = Math.max(word.length, 1) / totalChars;
+		const duration = totalDuration * weight;
+		const start = cursor;
+		const end = cursor + duration;
+		result.push({ word, start, end });
+		cursor = end;
+	}
+	return result;
+}
+
+/**
+ * Clamps word start/end times so none fall outside the segment's own
+ * [start, end] bounds. Segment bounds themselves are never changed here.
+ */
+function clampWordsToSegment(words: WordTimestamp[], segment: SubtitleSegment): WordTimestamp[] {
+	return words.map(w => ({
+		...w,
+		start: Math.min(Math.max(w.start, segment.start), segment.end),
+		end: Math.min(Math.max(w.end, segment.start), segment.end),
+	}));
+}
+
+/**
+ * Aligns a new list of word strings against the old WordTimestamp array using
+ * an LCS (longest common subsequence) over normalized word text. Words that
+ * survive the edit (part of the LCS) keep their original start/end times.
+ * Runs of inserted/replaced words between surviving anchors are assigned
+ * timestamps spread across the gap left by their neighbours (or segment
+ * bounds at the edges), weighted by character length.
+ */
+function alignWordsAfterEdit(
+	oldWords: WordTimestamp[],
+	newWordStrings: string[],
+	segment: SubtitleSegment
+): WordTimestamp[] {
+	const oldNorm = oldWords.map(w => normalizeForCompare(w.word));
+	const newNorm = newWordStrings.map(normalizeForCompare);
+	const n = oldNorm.length;
+	const m = newNorm.length;
+
+	// Standard LCS DP table over normalized word tokens.
+	const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+	for (let i = 1; i <= n; i++) {
+		for (let j = 1; j <= m; j++) {
+			if (oldNorm[i - 1] !== '' && oldNorm[i - 1] === newNorm[j - 1]) {
+				dp[i][j] = dp[i - 1][j - 1] + 1;
+			} else {
+				dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+			}
+		}
+	}
+
+	// Backtrack to recover the matched (oldIdx, newIdx) pairs.
+	const matches: Array<{ oldIdx: number; newIdx: number }> = [];
+	let i = n;
+	let j = m;
+	while (i > 0 && j > 0) {
+		if (oldNorm[i - 1] !== '' && oldNorm[i - 1] === newNorm[j - 1] && dp[i][j] === dp[i - 1][j - 1] + 1) {
+			matches.unshift({ oldIdx: i - 1, newIdx: j - 1 });
+			i--;
+			j--;
+		} else if (dp[i - 1][j] >= dp[i][j - 1]) {
+			i--;
+		} else {
+			j--;
+		}
+	}
+
+	// Matched words inherit the original word's timing exactly.
+	const result: WordTimestamp[] = new Array(m);
+	for (const { oldIdx, newIdx } of matches) {
+		result[newIdx] = {
+			word: newWordStrings[newIdx],
+			start: oldWords[oldIdx].start,
+			end: oldWords[oldIdx].end,
+		};
+	}
+
+	// Fill each run of unmatched (inserted/replaced) words using the nearest
+	// surviving neighbours — or segment bounds — as the gap to spread across.
+	let cursor = 0;
+	while (cursor < m) {
+		if (result[cursor]) {
+			cursor++;
+			continue;
+		}
+		let runEnd = cursor;
+		while (runEnd < m && !result[runEnd]) runEnd++;
+
+		const leftTime = cursor > 0 ? result[cursor - 1].end : segment.start;
+		const rightTime = runEnd < m ? result[runEnd].start : segment.end;
+		const gapWords = newWordStrings.slice(cursor, runEnd);
+
+		const spread = spreadWordsAcrossGap(gapWords, leftTime, rightTime);
+		for (let k = 0; k < gapWords.length; k++) {
+			result[cursor + k] = spread[k];
+		}
+		cursor = runEnd;
+	}
+
+	return clampWordsToSegment(result, segment);
+}
+
+/**
+ * Rebuilds a segment's words array from its (possibly edited) text, using
+ * word timestamps as the source of truth. Only touches timing where the text
+ * actually changed:
+ *  - If the words already match the text exactly, the segment is returned
+ *    untouched (no new object, no timing change).
+ *  - If the word count is unchanged (capitalisation/punctuation-only edits,
+ *    or a like-for-like word swap), every word keeps its original start/end
+ *    and only the displayed string is updated.
+ *  - If the word count changed (insert/delete/replace), unchanged words
+ *    (found via LCS over normalized, case/punctuation-insensitive text) keep
+ *    their original times; new words are timed by spreading across the gap
+ *    between surviving neighbours, weighted by character length.
+ * Segment start/end are never changed; words are clamped to stay within them.
  *
- * @param segment - The subtitle segment with edited text
- * @returns A new segment with updated words array matching the edited text
+ * @param segment - The subtitle segment with possibly-edited text
+ * @returns The segment, unchanged if its words already match the text, or a
+ *   new segment with a words array aligned to the new text
  */
 export function rebuildWordsFromText(segment: SubtitleSegment): SubtitleSegment {
-	const words = segment.text.trim().split(/\s+/);
-	const segmentDuration = segment.end - segment.start;
-	const wordDuration = segmentDuration / Math.max(words.length, 1);
+	const trimmedText = segment.text.trim();
+	const newWordStrings = trimmedText.length > 0 ? trimmedText.split(/\s+/) : [];
+	const oldWords = segment.words;
 
-	const newWords: WordTimestamp[] = words.map((word, i) => ({
-		word,
-		start: segment.start + i * wordDuration,
-		end: segment.start + (i + 1) * wordDuration,
-	}));
+	// Already in sync (including punctuation/capitalisation) — nothing to do.
+	if (
+		newWordStrings.length === oldWords.length &&
+		newWordStrings.every((w, idx) => w === oldWords[idx].word)
+	) {
+		return segment;
+	}
 
-	return {
-		...segment,
-		words: newWords,
-	};
+	// Same word count: capitalisation/punctuation-only edit, or a direct
+	// word-for-word swap. Keep every word's original timing; update strings.
+	if (newWordStrings.length === oldWords.length) {
+		const newWords: WordTimestamp[] = newWordStrings.map((word, idx) => ({
+			word,
+			start: oldWords[idx].start,
+			end: oldWords[idx].end,
+		}));
+		return { ...segment, words: clampWordsToSegment(newWords, segment) };
+	}
+
+	// Word count changed: align via LCS so unchanged words keep their times
+	// and only inserted/replaced words get newly computed timestamps.
+	const newWords = alignWordsAfterEdit(oldWords, newWordStrings, segment);
+	return { ...segment, words: newWords };
 }
 
 /**
