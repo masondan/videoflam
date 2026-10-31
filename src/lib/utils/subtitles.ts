@@ -84,6 +84,38 @@ const FONT_SIZE_RATIOS: Record<FontSize, number> = {
 	large: 0.07,
 };
 
+/**
+ * Duration (seconds) of a short visual fade-in applied only to the very
+ * first subtitle segment (one whose start time is at/near the beginning of
+ * the track). Transcription timestamps place the first segment's start at
+ * ~0s, but there's often a brief moment before the audio is actually
+ * audible (encoder lead-in, soft onset, etc.) — without this, the first
+ * subtitle line visibly "pops in" before any sound plays. This purely
+ * smooths the subtitle's own appearance; it does not change audio, word
+ * timing, or any other segment's rendering.
+ */
+const FIRST_SEGMENT_FADE_DURATION = 0.15; // 150ms
+
+/**
+ * A segment whose start time is at or below this threshold (seconds) is
+ * treated as "the first segment" for FIRST_SEGMENT_FADE_DURATION above.
+ * Segments starting later (e.g. after an intro or deliberate lead-in gap)
+ * are unaffected — their appearance already lines up with audible audio.
+ */
+const FIRST_SEGMENT_THRESHOLD = 0.1; // 100ms
+
+/**
+ * Returns 0–1 opacity multiplier for the start-of-track fade-in. Returns 1
+ * (fully opaque, no effect) for any segment that doesn't start at/near 0,
+ * or once FIRST_SEGMENT_FADE_DURATION has elapsed since the segment began.
+ */
+function calculateStartFadeAlpha(segment: SubtitleSegment, currentTime: number): number {
+	if (segment.start > FIRST_SEGMENT_THRESHOLD) return 1;
+	const elapsed = currentTime - segment.start;
+	if (elapsed >= FIRST_SEGMENT_FADE_DURATION) return 1;
+	return Math.max(0, Math.min(1, elapsed / FIRST_SEGMENT_FADE_DURATION));
+}
+
 // --- Core engine functions ---
 
 /**
@@ -491,19 +523,23 @@ export function drawSubtitle(
 	const blockY = canvasHeight * style.verticalPosition;
 	const centerX = canvasWidth / 2;
 
+	// Start-of-track fade: only non-1 for the very first segment, during its
+	// first FIRST_SEGMENT_FADE_DURATION seconds. See calculateStartFadeAlpha().
+	const startFadeAlpha = calculateStartFadeAlpha(segment, currentTime);
+
 	// Render label if enabled
 	if (style.labelEnabled) {
 		if (style.template === 'focus') {
-			drawFocusLabel(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx);
+			drawFocusLabel(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, startFadeAlpha);
 		} else if (style.template === 'flow') {
-			drawFlowLabel(ctx, segment, style, currentTime, lines, centerX, blockY, lineHeight, fontPx, wordOffset);
+			drawFlowLabel(ctx, segment, style, currentTime, lines, centerX, blockY, lineHeight, fontPx, wordOffset, startFadeAlpha);
 		}
 	}
 
 	if (style.template === 'focus') {
-		drawFocusSubtitle(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, currentTime, activeWordIndex, wordOffset);
+		drawFocusSubtitle(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, currentTime, activeWordIndex, wordOffset, startFadeAlpha);
 	} else {
-		drawFlowSubtitle(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, currentTime, wordOffset);
+		drawFlowSubtitle(ctx, segment, style, lines, centerX, blockY, lineHeight, fontPx, currentTime, wordOffset, startFadeAlpha);
 	}
 
 	ctx.restore();
@@ -540,7 +576,8 @@ function drawFocusSubtitle(
 	fontPx: number,
 	currentTime: number,
 	activeWordIndex: number,
-	wordOffset: number
+	wordOffset: number,
+	startFadeAlpha: number = 1
 ): void {
 	// allWords is the full segment word list.
 	// wordOffset is the index of the first word on the first visible line.
@@ -570,6 +607,7 @@ function drawFocusSubtitle(
 			const isActive = wordIdx === activeWordIndex;
 			const wordColor = (isActive && style.spotlightEnabled) ? style.spotlightColor : style.textColor;
 
+			ctx.globalAlpha = startFadeAlpha;
 			applyTextEffects(ctx, style, fontPx);
 			ctx.fillStyle = wordColor;
 
@@ -581,6 +619,7 @@ function drawFocusSubtitle(
 			}
 			ctx.textAlign = 'left';
 			ctx.fillText(displayWord, wordX, lineY);
+			ctx.globalAlpha = 1;
 
 			const wordWidth = ctx.measureText(displayWord + ' ').width;
 			wordX += wordWidth;
@@ -601,7 +640,8 @@ function drawFlowSubtitle(
 	lineHeight: number,
 	fontPx: number,
 	currentTime: number,
-	wordOffset: number
+	wordOffset: number,
+	startFadeAlpha: number = 1
 ): void {
 	const FADE_DURATION = 0.15; // seconds
 
@@ -645,7 +685,7 @@ function drawFlowSubtitle(
 				? style.spotlightColor
 				: style.textColor;
 
-			ctx.globalAlpha = alpha;
+			ctx.globalAlpha = alpha * startFadeAlpha;
 			applyTextEffects(ctx, style, fontPx);
 			ctx.fillStyle = wordColor;
 
@@ -676,7 +716,8 @@ function drawFocusLabel(
 	centerX: number,
 	blockY: number,
 	lineHeight: number,
-	fontPx: number
+	fontPx: number,
+	startFadeAlpha: number = 1
 ): void {
 	const pad = style.labelPadding;
 	const canvasWidth = centerX * 2;
@@ -709,7 +750,7 @@ function drawFocusLabel(
 			fontPx + pad * 2,
 			style.labelBorderRadius,
 			style.labelColor,
-			1.0
+			1.0 * startFadeAlpha
 		);
 	}
 }
@@ -724,7 +765,8 @@ function drawFlowLabel(
 	blockY: number,
 	lineHeight: number,
 	fontPx: number,
-	wordOffset: number
+	wordOffset: number,
+	startFadeAlpha: number = 1
 ): void {
 	const allWords = segment.words;
 	const canvasWidth = centerX * 2;
@@ -762,7 +804,7 @@ function drawFlowLabel(
 
 			// Only draw label for the currently active word
 			if (currentTime >= timing.start && currentTime < timing.end) {
-				const opacity = calculateLabelOpacity(currentTime, timing.start, timing.end, fadeDurationSec);
+				const opacity = calculateLabelOpacity(currentTime, timing.start, timing.end, fadeDurationSec) * startFadeAlpha;
 				if (opacity >= 0.01) {
 					const wordWidth = ctx.measureText(displayWord).width;
 					// textBaseline = 'top': text renders downward from lineY.
